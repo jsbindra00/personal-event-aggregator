@@ -81,6 +81,24 @@ importers:
 
   packages/connector-common: {}
 
+  packages/connector-luma:
+    dependencies:
+      '@event-agg/browser':
+        specifier: workspace:*
+        version: link:../browser
+      '@event-agg/connector-common':
+        specifier: workspace:*
+        version: link:../connector-common
+      '@event-agg/core':
+        specifier: workspace:*
+        version: link:../core
+      playwright-core:
+        specifier: ^1.58.2
+        version: 1.62.1
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
   packages/core:
     dependencies:
       '@js-temporal/polyfill':
