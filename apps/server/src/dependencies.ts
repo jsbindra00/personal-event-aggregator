@@ -25,11 +25,23 @@ import {
   createSearchService,
   type ConnectorMessage,
   type EventConnector,
+  type EventRelevanceEvaluator,
   type EventSource,
+  type RelevanceCache,
   type ResolvedSearchQuery,
   type SearchStore
 } from "@event-agg/core";
-import { createRepositories, openDatabase } from "@event-agg/storage";
+import {
+  createLexicalRelevanceEvaluator,
+  createOllamaRelevanceEvaluator,
+  createResilientRelevanceEvaluator
+} from "@event-agg/relevance";
+import {
+  createRepositories,
+  eventRelevanceFingerprint,
+  openDatabase,
+  profileRelevanceFingerprint
+} from "@event-agg/storage";
 import type { Page } from "playwright-core";
 
 import type { AppDependencies, ConnectorManager } from "./app.js";
@@ -53,6 +65,9 @@ export interface ProductionDependencyOptions {
   connectors?: EventConnector[];
   fetch?: typeof globalThis.fetch;
   diagnostic?: (value: unknown) => void;
+  relevanceEvaluator?: EventRelevanceEvaluator;
+  relevanceFetch?: typeof globalThis.fetch;
+  environment?: Record<string, string | undefined>;
 }
 
 export interface ProductionDependencies extends AppDependencies {
@@ -70,6 +85,7 @@ export function createProductionDependencies(
       resolve(".data/events.sqlite")
   );
   const repositories = createRepositories(database);
+  const environment = options.environment ?? process.env;
   const browserHost = options.browserHost ?? new BrowserHost();
   const diagnosticOptions =
     options.diagnostic === undefined ? {} : { diagnostic: options.diagnostic };
@@ -125,10 +141,43 @@ export function createProductionDependencies(
       repositories.events.linkToSearch(searchId, event, rank);
     }
   };
+  const relevanceEvaluator =
+    options.relevanceEvaluator ??
+    createResilientRelevanceEvaluator(
+      createOllamaRelevanceEvaluator({
+        endpoint:
+          environment.EVENT_AGG_OLLAMA_URL ?? "http://127.0.0.1:11434",
+        model: environment.EVENT_AGG_RELEVANCE_MODEL ?? "gemma3:4b",
+        timeoutMs: relevanceTimeout(environment.EVENT_AGG_RELEVANCE_TIMEOUT_MS),
+        promptVersion: "event-relevance-v1",
+        ...(options.relevanceFetch === undefined
+          ? {}
+          : { fetch: options.relevanceFetch })
+      }),
+      createLexicalRelevanceEvaluator()
+    );
+  const relevanceCache: RelevanceCache = {
+    get: (event, profile, evaluatorFingerprint) =>
+      repositories.relevanceCache.get({
+        eventFingerprint: eventRelevanceFingerprint(event),
+        profileFingerprint: profileRelevanceFingerprint(profile),
+        evaluatorFingerprint
+      }),
+    put: (event, profile, evaluatorFingerprint, decision) =>
+      repositories.relevanceCache.put({
+        eventFingerprint: eventRelevanceFingerprint(event),
+        profileFingerprint: profileRelevanceFingerprint(profile),
+        evaluatorFingerprint,
+        decision,
+        createdAt: new Date().toISOString()
+      })
+  };
   const searchService = createSearchService({
     connectors,
     store,
-    getInterests: () => repositories.interests.get()
+    getInterests: () => repositories.interests.get(),
+    relevanceEvaluator,
+    relevanceCache
   });
   const registry = new Map(
     connectors.map((connector) => [connector.source, connector] as const)
@@ -157,6 +206,7 @@ export function createProductionDependencies(
     searchService,
     interests: repositories.interests,
     connectors: connectorManager,
+    relevance: { getStatus: () => relevanceEvaluator.status() },
     connectorSources: connectors.map((connector) => connector.source),
     cancelActiveSearches: () => searchService.cancelAll(),
     close: async () => {
@@ -167,6 +217,14 @@ export function createProductionDependencies(
       database.close();
     }
   };
+}
+
+function relevanceTimeout(value: string | undefined): number {
+  const timeout = Number(value ?? 30_000);
+  if (!Number.isSafeInteger(timeout) || timeout < 1) {
+    throw new Error("Relevance timeout must be a positive integer");
+  }
+  return timeout;
 }
 
 function withInteractiveConnection(

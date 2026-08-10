@@ -34,7 +34,10 @@ const event: NormalizedEvent = {
   imageUrl: null,
   priceText: null,
   tags: ["AI"],
+  relevanceDecision: "show",
   relevanceScore: 42,
+  relevanceConfidence: 0.9,
+  relevanceReason: "Matches the saved AI interest",
   matchedInterests: ["AI"],
   firstSeenAt: "2026-08-10T00:00:00.000Z"
 };
@@ -83,6 +86,17 @@ class FakeSearchService implements SearchService {
       },
       status: "running",
       events: [],
+      maybeEvents: [],
+      relevance: {
+        state: "evaluating",
+        evaluator: "ollama",
+        model: "gemma3:4b",
+        evaluatedCount: 0,
+        showCount: 0,
+        maybeCount: 0,
+        hideCount: 0,
+        safeMessage: null
+      },
       sources: statuses.map((status) => ({ ...status, state: "searching" }))
     });
     return { searchId };

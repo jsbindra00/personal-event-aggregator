@@ -3,6 +3,7 @@ import type {
   ConnectorStatus,
   EventSource,
   InterestProfile,
+  RelevanceStatus,
   SearchStore
 } from "../../../packages/core/src/index.js";
 import type { AppDependencies } from "../src/app.js";
@@ -34,6 +35,16 @@ export function testDependencies(): AppDependencies & {
       safeMessage: null
     }
   ];
+  const relevance: RelevanceStatus = {
+    state: "ready",
+    evaluator: "resilient",
+    model: "gemma3:4b",
+    evaluatedCount: 0,
+    showCount: 0,
+    maybeCount: 0,
+    hideCount: 0,
+    safeMessage: null
+  };
 
   return {
     searchService: createSearchService({
@@ -55,7 +66,7 @@ export function testDependencies(): AppDependencies & {
         connectedSources.push(source);
       }
     },
+    relevance: { getStatus: async () => relevance },
     connectedSources
   };
 }
-

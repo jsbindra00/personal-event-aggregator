@@ -2,7 +2,9 @@ import type {
   ConnectorMessage,
   ConnectorStatus,
   EventConnector,
+  EventRelevanceEvaluator,
   EventSource,
+  RelevanceStatus,
   ResolvedSearchQuery
 } from "@event-agg/core";
 import { afterEach, describe, expect, it } from "vitest";
@@ -53,6 +55,29 @@ class StaticConnector implements EventConnector {
 const dependenciesToClose: ProductionDependencies[] = [];
 const apps: Array<ReturnType<typeof buildApp>> = [];
 
+const showAllEvaluator: EventRelevanceEvaluator = {
+  fingerprint: "test-show-all",
+  evaluate: async (events) =>
+    events.map((event) => ({
+      eventId: event.id,
+      decision: "show" as const,
+      score: 100,
+      confidence: 1,
+      matchedInterests: [],
+      reason: "Accepted by connector integration fixture"
+    })),
+  status: async () => ({
+    state: "ready",
+    evaluator: "test-show-all",
+    model: null,
+    evaluatedCount: 0,
+    showCount: 0,
+    maybeCount: 0,
+    hideCount: 0,
+    safeMessage: null
+  })
+};
+
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
   await Promise.all(dependenciesToClose.splice(0).map((deps) => deps.close()));
@@ -69,6 +94,72 @@ function status(source: EventSource, state: ConnectorStatus["state"]): Connector
 }
 
 describe("production connector wiring", () => {
+  it("uses an injected local evaluator and exposes its readiness", async () => {
+    const expected: RelevanceStatus = {
+      state: "ready",
+      evaluator: "ollama",
+      model: "gemma3:4b",
+      evaluatedCount: 0,
+      showCount: 0,
+      maybeCount: 0,
+      hideCount: 0,
+      safeMessage: null
+    };
+    const evaluator: EventRelevanceEvaluator = {
+      fingerprint: "test-evaluator",
+      evaluate: async () => [],
+      status: async () => expected
+    };
+    const dependencies = createProductionDependencies({
+      databasePath: ":memory:",
+      browserHost: new FakeBrowserHost(),
+      relevanceEvaluator: evaluator
+    });
+    dependenciesToClose.push(dependencies);
+    const app = buildApp(dependencies);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/relevance/status"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(expected);
+  });
+
+  it("configures the default evaluator from the local-model environment", async () => {
+    const requests: string[] = [];
+    const dependencies = createProductionDependencies({
+      databasePath: ":memory:",
+      browserHost: new FakeBrowserHost(),
+      environment: {
+        EVENT_AGG_OLLAMA_URL: "http://localhost:11555",
+        EVENT_AGG_RELEVANCE_MODEL: "gemma3:12b",
+        EVENT_AGG_RELEVANCE_TIMEOUT_MS: "1234"
+      },
+      relevanceFetch: async (input) => {
+        requests.push(String(input));
+        return Response.json({ models: [{ name: "gemma3:12b" }] });
+      }
+    });
+    dependenciesToClose.push(dependencies);
+    const app = buildApp(dependencies);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/relevance/status"
+    });
+
+    expect(response.json()).toMatchObject({
+      state: "ready",
+      evaluator: "resilient",
+      model: "gemma3:12b"
+    });
+    expect(requests).toEqual(["http://localhost:11555/api/tags"]);
+  });
+
   it("constructs exactly the four configured source connectors", () => {
     const dependencies = createProductionDependencies({
       databasePath: ":memory:",
@@ -86,7 +177,8 @@ describe("production connector wiring", () => {
     const dependencies = createProductionDependencies({
       databasePath: ":memory:",
       browserHost,
-      fetch: createDirectFixtureFetch()
+      fetch: createDirectFixtureFetch(),
+      relevanceEvaluator: showAllEvaluator
     });
     dependenciesToClose.push(dependencies);
 

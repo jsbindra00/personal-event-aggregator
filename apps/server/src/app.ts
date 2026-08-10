@@ -7,6 +7,7 @@ import {
   type ConnectorStatus,
   type EventSource,
   type InterestProfile,
+  type RelevanceStatus,
   type SearchService
 } from "@event-agg/core";
 
@@ -22,10 +23,15 @@ export interface ConnectorManager {
   connect(source: EventSource): Promise<void>;
 }
 
+export interface RelevanceService {
+  getStatus(): Promise<RelevanceStatus>;
+}
+
 export interface AppDependencies {
   searchService: SearchService;
   interests: InterestService;
   connectors: ConnectorManager;
+  relevance: RelevanceService;
 }
 
 function validationError(reply: FastifyReply, error: unknown) {
@@ -53,6 +59,10 @@ export function buildApp(dependencies: AppDependencies) {
   });
 
   app.get("/api/connectors", async () => dependencies.connectors.getStatuses());
+
+  app.get("/api/relevance/status", async () =>
+    dependencies.relevance.getStatus()
+  );
 
   app.post<{ Params: { source: string } }>(
     "/api/connectors/:source/connect",

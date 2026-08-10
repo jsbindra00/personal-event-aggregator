@@ -24,6 +24,7 @@
     "@event-agg/connector-luma": "workspace:*",
     "@event-agg/connector-meetup": "workspace:*",
     "@event-agg/core": "workspace:*",
+    "@event-agg/relevance": "workspace:*",
     "@event-agg/storage": "workspace:*",
     "fastify": "^5.11.3",
     "playwright-core": "^1.58.2",

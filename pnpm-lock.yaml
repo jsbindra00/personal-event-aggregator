@@ -62,6 +62,9 @@ importers:
       '@event-agg/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@event-agg/relevance':
+        specifier: workspace:*
+        version: link:../../packages/relevance
       '@event-agg/storage':
         specifier: workspace:*
         version: link:../../packages/storage

@@ -85,6 +85,28 @@ describe("event aggregator HTTP API", () => {
     });
   });
 
+  it("exposes safe local relevance readiness", async () => {
+    const app = buildApp(testDependencies());
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/relevance/status"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      state: "ready",
+      evaluator: "resilient",
+      model: "gemma3:4b",
+      evaluatedCount: 0,
+      showCount: 0,
+      maybeCount: 0,
+      hideCount: 0,
+      safeMessage: null
+    });
+  });
+
   it("keeps connector actions source-scoped", async () => {
     const dependencies = testDependencies();
     const app = buildApp(dependencies);
@@ -113,4 +135,3 @@ describe("event aggregator HTTP API", () => {
     ).toBe(404);
   });
 });
-
