@@ -15,3 +15,5 @@ export {
   parseMeetupSearchPayload
 } from "./parser.js";
 export type { ParsedMeetupPage } from "./parser.js";
+export { createDirectMeetupConnector } from "./direct.js";
+export type { DirectMeetupOptions } from "./direct.js";

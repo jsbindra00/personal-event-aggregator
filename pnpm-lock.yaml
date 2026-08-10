@@ -183,6 +183,9 @@ importers:
       '@event-agg/core':
         specifier: workspace:*
         version: link:../core
+      '@js-temporal/polyfill':
+        specifier: ^0.5.1
+        version: 0.5.1
       playwright-core:
         specifier: ^1.58.2
         version: 1.62.1

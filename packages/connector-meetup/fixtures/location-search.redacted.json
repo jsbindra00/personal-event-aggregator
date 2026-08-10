@@ -1,0 +1,17 @@
+{
+  "data": {
+    "result": [
+      {
+        "city": "London",
+        "country": "gb",
+        "lat": 51.52,
+        "lon": -0.1,
+        "name": "London, Greater London, England, United Kingdom",
+        "state": "17",
+        "timeZone": "Europe/London",
+        "zip": "EC1A 4DD",
+        "__typename": "LocationSearch"
+      }
+    ]
+  }
+}
