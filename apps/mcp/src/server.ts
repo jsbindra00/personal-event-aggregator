@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   eventSearchQuerySchema,
   interestProfileSchema,
+  relevanceStatusSchema,
   type ConnectorStatus,
   type InterestProfile,
   type NormalizedEvent,
@@ -60,13 +61,19 @@ const eventLinkSchema = z.object({
   addressText: nullableString,
   isOnline: z.boolean(),
   priceText: nullableString,
+  relevanceDecision: z.enum(["show", "maybe", "hide"]),
   relevanceScore: z.number(),
+  relevanceConfidence: z.number(),
+  relevanceReason: z.string(),
   matchedInterests: z.array(z.string())
 });
 const searchOutputSchema = z.object({
   searchId: z.string(),
   status: z.enum(["running", "complete", "cancelled"]),
   events: z.array(eventLinkSchema),
+  maybeCount: z.number().int().nonnegative(),
+  maybeEvents: z.array(eventLinkSchema).optional(),
+  relevance: relevanceStatusSchema,
   sources: z.array(connectorStatusSchema)
 });
 const sourcesOutputSchema = z.object({ sources: z.array(connectorStatusSchema) });
@@ -74,7 +81,12 @@ const startedOutputSchema = z.object({
   searchId: z.string(),
   status: z.literal("running")
 });
-const searchIdSchema = z.object({ searchId: z.string().trim().min(1) });
+const includeMaybeSchema = { includeMaybe: z.boolean().optional().default(false) };
+const searchInputSchema = eventSearchQuerySchema.extend(includeMaybeSchema);
+const searchIdSchema = z.object({
+  searchId: z.string().trim().min(1),
+  ...includeMaybeSchema
+});
 
 type HandlerExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 
@@ -110,27 +122,45 @@ function eventLink(event: NormalizedEvent) {
     addressText: event.addressText,
     isOnline: event.isOnline,
     priceText: event.priceText,
+    relevanceDecision: event.relevanceDecision,
     relevanceScore: event.relevanceScore,
+    relevanceConfidence: event.relevanceConfidence,
+    relevanceReason: event.relevanceReason,
     matchedInterests: event.matchedInterests
   };
 }
 
-function snapshotResult(snapshot: SearchSnapshot) {
+function snapshotResult(snapshot: SearchSnapshot, includeMaybe: boolean) {
   return {
     searchId: snapshot.searchId,
     status: snapshot.status,
     events: snapshot.events.map(eventLink),
+    maybeCount: snapshot.maybeEvents.length,
+    ...(includeMaybe
+      ? { maybeEvents: snapshot.maybeEvents.map(eventLink) }
+      : {}),
+    relevance: snapshot.relevance,
     sources: snapshot.sources
   };
 }
 
-function searchText(snapshot: SearchSnapshot): string {
-  if (snapshot.events.length === 0) {
+function searchText(snapshot: SearchSnapshot, includeMaybe: boolean): string {
+  const events = includeMaybe
+    ? [...snapshot.events, ...snapshot.maybeEvents]
+    : snapshot.events;
+  if (events.length === 0) {
     return `No events found. Search status: ${snapshot.status}.`;
   }
-  return snapshot.events
+  return events
     .map((event) => `${event.title} — ${event.startsAt}\n${event.canonicalUrl}`)
     .join("\n\n");
+}
+
+function progressText(type: string): string {
+  if (type === "search.completed") return "Search complete";
+  if (type === "relevance.progress") return "Evaluating relevance";
+  if (type === "relevance.fallback") return "Using strict relevance fallback";
+  return type.replaceAll(".", " ");
 }
 
 async function progress(
@@ -225,10 +255,13 @@ export function buildEventMcpServer(
       outputSchema: searchOutputSchema,
       annotations: { readOnlyHint: true }
     },
-    async ({ searchId }) => {
+    async ({ searchId, includeMaybe }) => {
       const snapshot = dependencies.searchService.snapshot(searchId);
       if (!snapshot) throw new Error("Event search not found");
-      return textResult(snapshotResult(snapshot), searchText(snapshot));
+      return textResult(
+        snapshotResult(snapshot, includeMaybe),
+        searchText(snapshot, includeMaybe)
+      );
     }
   );
 
@@ -237,11 +270,11 @@ export function buildEventMcpServer(
     {
       title: "Search events",
       description: "Search all event sources and wait for ranked event links and source outcomes.",
-      inputSchema: eventSearchQuerySchema,
+      inputSchema: searchInputSchema,
       outputSchema: searchOutputSchema,
       annotations: { readOnlyHint: true }
     },
-    async (input, extra) => {
+    async ({ includeMaybe, ...input }, extra) => {
       const { searchId } = await dependencies.searchService.start(input);
       const cancel = () => dependencies.searchService.cancel(searchId);
       extra.signal.addEventListener("abort", cancel, { once: true });
@@ -250,11 +283,7 @@ export function buildEventMcpServer(
         await progress(extra, step, "Search started");
         for await (const message of dependencies.searchService.subscribe(searchId)) {
           step += 1;
-          const messageText =
-            message.type === "search.completed"
-              ? "Search complete"
-              : message.type.replaceAll(".", " ");
-          await progress(extra, step, messageText);
+          await progress(extra, step, progressText(message.type));
         }
       } finally {
         extra.signal.removeEventListener("abort", cancel);
@@ -262,7 +291,10 @@ export function buildEventMcpServer(
       }
       const snapshot = dependencies.searchService.snapshot(searchId);
       if (!snapshot) throw new Error("Event search not found");
-      return textResult(snapshotResult(snapshot), searchText(snapshot));
+      return textResult(
+        snapshotResult(snapshot, includeMaybe),
+        searchText(snapshot, includeMaybe)
+      );
     }
   );
 

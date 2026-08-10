@@ -39,7 +39,27 @@ describe("event aggregator HTTP API", () => {
     expect(snapshot.json()).toMatchObject({
       searchId: "search-1",
       status: "complete",
-      events: []
+      events: [],
+      maybeCount: 0,
+      relevance: { state: "complete" }
+    });
+    expect(snapshot.json()).not.toHaveProperty("maybeEvents");
+
+    const withMaybe = await app.inject({
+      method: "GET",
+      url: "/api/searches/search-1?includeMaybe=true"
+    });
+    expect(withMaybe.json()).toMatchObject({ maybeEvents: [], maybeCount: 0 });
+
+    const events = await app.inject({
+      method: "GET",
+      url: "/api/searches/search-1/events?includeMaybe=true"
+    });
+    expect(events.json()).toMatchObject({
+      events: [],
+      maybeEvents: [],
+      maybeCount: 0,
+      relevance: { state: "complete" }
     });
   });
 

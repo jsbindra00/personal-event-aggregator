@@ -8,7 +8,8 @@ import {
   type EventSource,
   type InterestProfile,
   type RelevanceStatus,
-  type SearchService
+  type SearchService,
+  type SearchSnapshot
 } from "@event-agg/core";
 
 import { pipeSse } from "./sse.js";
@@ -37,6 +38,24 @@ export interface AppDependencies {
 function validationError(reply: FastifyReply, error: unknown) {
   const message = error instanceof Error ? error.message : "Invalid request";
   return reply.code(400).send({ error: "validation_error", message });
+}
+
+function searchOutput(snapshot: SearchSnapshot, includeMaybe: boolean) {
+  const { maybeEvents, ...visible } = snapshot;
+  return {
+    ...visible,
+    maybeCount: maybeEvents.length,
+    ...(includeMaybe ? { maybeEvents } : {})
+  };
+}
+
+function eventsOutput(snapshot: SearchSnapshot, includeMaybe: boolean) {
+  return {
+    events: snapshot.events,
+    maybeCount: snapshot.maybeEvents.length,
+    relevance: snapshot.relevance,
+    ...(includeMaybe ? { maybeEvents: snapshot.maybeEvents } : {})
+  };
 }
 
 export function buildApp(dependencies: AppDependencies) {
@@ -92,19 +111,23 @@ export function buildApp(dependencies: AppDependencies) {
     }
   });
 
-  app.get<{ Params: { id: string } }>(
+  app.get<{ Params: { id: string }; Querystring: { includeMaybe?: string } }>(
     "/api/searches/:id",
     async (request, reply) => {
       const snapshot = dependencies.searchService.snapshot(request.params.id);
-      return snapshot ?? reply.code(404).send({ error: "search_not_found" });
+      return snapshot
+        ? searchOutput(snapshot, request.query.includeMaybe === "true")
+        : reply.code(404).send({ error: "search_not_found" });
     }
   );
 
-  app.get<{ Params: { id: string } }>(
+  app.get<{ Params: { id: string }; Querystring: { includeMaybe?: string } }>(
     "/api/searches/:id/events",
     async (request, reply) => {
       const snapshot = dependencies.searchService.snapshot(request.params.id);
-      return snapshot?.events ?? reply.code(404).send({ error: "search_not_found" });
+      return snapshot
+        ? eventsOutput(snapshot, request.query.includeMaybe === "true")
+        : reply.code(404).send({ error: "search_not_found" });
     }
   );
 

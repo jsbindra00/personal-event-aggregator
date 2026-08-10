@@ -42,6 +42,31 @@ const event: NormalizedEvent = {
   firstSeenAt: "2026-08-10T00:00:00.000Z"
 };
 
+const maybeEvent: NormalizedEvent = {
+  ...event,
+  id: "meetup:possible-product-event",
+  source: "meetup",
+  sourceEventId: "possible-product-event",
+  canonicalUrl: "https://www.meetup.com/example/events/possible",
+  title: "Possible Product Gathering",
+  relevanceDecision: "maybe",
+  relevanceScore: 56,
+  relevanceConfidence: 0.61,
+  relevanceReason: "Possibly related to product work",
+  matchedInterests: []
+};
+
+const relevance = {
+  state: "complete" as const,
+  evaluator: "resilient",
+  model: "gemma3:4b",
+  evaluatedCount: 2,
+  showCount: 1,
+  maybeCount: 1,
+  hideCount: 0,
+  safeMessage: null
+};
+
 const statuses: ConnectorStatus[] = [
   {
     source: "luma",
@@ -86,7 +111,7 @@ class FakeSearchService implements SearchService {
       },
       status: "running",
       events: [],
-      maybeEvents: [],
+      maybeEvents: [maybeEvent],
       relevance: {
         state: "evaluating",
         evaluator: "ollama",
@@ -107,21 +132,28 @@ class FakeSearchService implements SearchService {
     if (!snapshot) throw new Error("Search not found");
     const messages: SearchStreamMessage[] = [
       { sequence: 1, searchId, type: "search.started" },
-      { sequence: 2, searchId, type: "event.added", source: "luma", event },
       {
-        sequence: 3,
+        sequence: 2,
+        searchId,
+        type: "relevance.progress",
+        relevance: { ...relevance, state: "evaluating" }
+      },
+      { sequence: 3, searchId, type: "event.added", source: "luma", event },
+      {
+        sequence: 4,
         searchId,
         type: "source.failed",
         source: "meetup",
         status: statuses[1]!
       },
-      { sequence: 4, searchId, type: "search.completed" }
+      { sequence: 5, searchId, type: "search.completed" }
     ];
     const finish = () => {
       this.snapshots.set(searchId, {
         ...snapshot,
         status: "complete",
         events: [event],
+        relevance,
         sources: statuses
       });
     };
@@ -160,6 +192,7 @@ class FakeSearchService implements SearchService {
       ...snapshot,
       status: "complete",
       events: [event],
+      relevance,
       sources: statuses
     });
   }
@@ -263,12 +296,22 @@ describe("event aggregator MCP server", () => {
     expect(searchService.inputs).toEqual([query]);
     expect(structured(result)).toMatchObject({
       status: "complete",
-      events: [{ title: "AI Builders", url: "https://lu.ma/example", source: "luma" }],
+      events: [{
+        title: "AI Builders",
+        url: "https://lu.ma/example",
+        source: "luma",
+        relevanceDecision: "show",
+        relevanceConfidence: 0.9,
+        relevanceReason: "Matches the saved AI interest"
+      }],
+      maybeCount: 1,
+      relevance: { state: "complete", model: "gemma3:4b" },
       sources: [
         { source: "luma", state: "complete" },
         { source: "meetup", state: "failed", errorCode: "source_unavailable" }
       ]
     });
+    expect(structured(result)).not.toHaveProperty("maybeEvents");
   });
 
   it("starts immediately and supports progressive result polling", async () => {
@@ -292,7 +335,20 @@ describe("event aggregator MCP server", () => {
     });
     expect(structured(complete)).toMatchObject({
       status: "complete",
-      events: [{ url: "https://lu.ma/example" }]
+      events: [{ url: "https://lu.ma/example" }],
+      maybeCount: 1
+    });
+
+    const withMaybe = await client.callTool({
+      name: "get_event_search_results",
+      arguments: { searchId, includeMaybe: true }
+    });
+    expect(structured(withMaybe)).toMatchObject({
+      maybeCount: 1,
+      maybeEvents: [{
+        url: "https://www.meetup.com/example/events/possible",
+        relevanceDecision: "maybe"
+      }]
     });
   });
 
@@ -308,6 +364,9 @@ describe("event aggregator MCP server", () => {
       { onprogress: (update) => progress.push(update) }
     );
     expect(progress.length).toBeGreaterThan(0);
+    expect(progress).toContainEqual(
+      expect.objectContaining({ message: "Evaluating relevance" })
+    );
     expect(progress.at(-1)).toMatchObject({ message: "Search complete" });
   });
 
