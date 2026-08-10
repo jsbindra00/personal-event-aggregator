@@ -98,7 +98,8 @@ function memoryStore(): SearchStore {
     createSearch: () => undefined,
     setSearchStatus: () => undefined,
     upsertSource: () => undefined,
-    saveEvent: () => undefined
+    saveEvent: () => undefined,
+    removeEvent: () => undefined
   };
 }
 
@@ -182,6 +183,37 @@ function relevanceDecision(
 }
 
 describe("SearchService", () => {
+  it("returns a search ID without waiting for model readiness", async () => {
+    const readinessGate = new Promise<RelevanceStatus>(() => undefined);
+    const connectorGate = deferred();
+    const evaluator: EventRelevanceEvaluator = {
+      fingerprint: "stalled-readiness:v1",
+      evaluate: async () => [],
+      status: async () => readinessGate
+    };
+    const waiting = new TestConnector("luma", async function* () {
+      await connectorGate.promise;
+      yield { type: "complete", source: "luma", count: 0 };
+    });
+    const service = serviceWith([waiting], { relevanceEvaluator: evaluator });
+
+    const started = await Promise.race([
+      service.start(query),
+      new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), 30)
+      )
+    ]);
+
+    expect(started).not.toBe("timeout");
+    if (started === "timeout") return;
+    expect(service.snapshot(started.searchId)).toMatchObject({
+      status: "running",
+      relevance: { evaluator: "configured", evaluatedCount: 0 }
+    });
+    service.cancel(started.searchId);
+    connectorGate.resolve();
+  });
+
   it("batches candidates and emits only show decisions", async () => {
     const batches: string[][] = [];
     const evaluator = relevanceEvaluator(async (events) => {
@@ -293,6 +325,42 @@ describe("SearchService", () => {
     expect(messages.filter(({ type }) => type === "event.maybe")).toHaveLength(1);
     expect(service.snapshot(searchId)?.events).toEqual([]);
     expect(service.snapshot(searchId)?.maybeEvents).toHaveLength(1);
+  });
+
+  it("rebinds a content-cache decision to the current event identity", async () => {
+    const evaluator = relevanceEvaluator(async () => {
+      throw new Error("a cache hit must not invoke the evaluator");
+    });
+    const cache: RelevanceCache = {
+      get() {
+        return relevanceDecision("luma:previous-winner", "show", 91);
+      },
+      put() {}
+    };
+    const service = serviceWith(
+      [
+        connectorFromMessages("eventbrite", [
+          {
+            type: "event",
+            source: "eventbrite",
+            event: rawEvent("eventbrite")
+          },
+          { type: "complete", source: "eventbrite", count: 1 }
+        ])
+      ],
+      { relevanceEvaluator: evaluator, relevanceCache: cache }
+    );
+
+    const { searchId } = await service.start(query);
+    for await (const _message of service.subscribe(searchId)) {
+      // Drain the cached search.
+    }
+
+    expect(service.snapshot(searchId)).toMatchObject({
+      status: "complete",
+      events: [{ id: "eventbrite:eventbrite-1", relevanceDecision: "show" }],
+      sources: [{ source: "eventbrite", state: "complete" }]
+    });
   });
 
   it("surfaces model fallback status without failing the source", async () => {
@@ -502,6 +570,71 @@ describe("SearchService", () => {
 
     expect(added.event?.descriptionText).toBe("A detailed builder event");
     expect(service.snapshot(searchId)?.events).toHaveLength(1);
+  });
+
+  it("re-evaluates a richer duplicate that arrives after the first decision", async () => {
+    const allowDuplicate = deferred();
+    const removed: string[] = [];
+    let evaluations = 0;
+    const evaluator = relevanceEvaluator(async (events) => {
+      evaluations += 1;
+      return events.map(({ id, descriptionText }) =>
+        relevanceDecision(
+          id,
+          descriptionText === "New evidence changes the decision" ? "hide" : "show",
+          descriptionText === "New evidence changes the decision" ? 5 : 90
+        )
+      );
+    });
+    const richer = new TestConnector("meetup", async function* () {
+      await allowDuplicate.promise;
+      yield {
+        type: "event",
+        source: "meetup",
+        event: rawEvent("meetup", {
+          canonicalUrl: "https://www.meetup.com/ai/events/1",
+          descriptionText: "New evidence changes the decision"
+        })
+      };
+      yield { type: "complete", source: "meetup", count: 1 };
+    });
+    const service = serviceWith(
+      [
+        connectorFromMessages("luma", [
+          {
+            type: "event",
+            source: "luma",
+            event: rawEvent("luma", { descriptionText: null })
+          },
+          { type: "complete", source: "luma", count: 1 }
+        ]),
+        richer
+      ],
+      {
+        relevanceEvaluator: evaluator,
+        relevanceBatchSize: 1,
+        store: {
+          ...memoryStore(),
+          removeEvent: (_searchId, eventId) => removed.push(eventId)
+        }
+      }
+    );
+
+    const { searchId } = await service.start(query);
+    const stream = service.subscribe(searchId)[Symbol.asyncIterator]();
+    await nextOfType(stream, "event.added");
+    allowDuplicate.resolve();
+    const updated = await nextOfType(stream, "event.updated");
+    await nextOfType(stream, "search.completed");
+
+    expect(evaluations).toBe(2);
+    expect(updated.event?.relevanceDecision).toBe("hide");
+    expect(removed).toEqual(["luma:luma-1"]);
+    expect(service.snapshot(searchId)).toMatchObject({
+      events: [],
+      maybeEvents: [],
+      relevance: { evaluatedCount: 1, hideCount: 1 }
+    });
   });
 
   it("cancels unfinished connectors and completes the search exactly once", async () => {

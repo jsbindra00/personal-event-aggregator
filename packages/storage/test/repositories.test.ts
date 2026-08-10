@@ -129,6 +129,9 @@ describe("search and event repositories", () => {
         errorCode: "contract_drift"
       })
     ]);
+
+    repositories.events.unlinkFromSearch("search-1", maybe.id);
+    expect(repositories.events.listForSearch("search-1")).toEqual([event]);
   });
 
   it("caches decisions by event, profile, and evaluator fingerprints", () => {
@@ -198,10 +201,29 @@ describe("search and event repositories", () => {
     expect(eventRelevanceFingerprint(base)).toBe(
       eventRelevanceFingerprint({
         ...base,
+        id: "meetup:another-id",
+        source: "meetup",
+        sourceEventId: "another-id",
+        canonicalUrl: "https://meetup.com/events/another-id",
+        latitude: 40.7,
+        longitude: -74,
+        imageUrl: "https://images.example/changed.jpg",
+        priceText: "Paid",
         relevanceScore: 99,
         relevanceDecision: "show"
       })
     );
+    for (const changed of [
+      { startsAt: "2026-08-12T19:00:00.000Z" },
+      { endsAt: "2026-08-12T21:00:00.000Z" },
+      { timeZone: "America/New_York" },
+      { addressText: "New York" },
+      { isOnline: true }
+    ]) {
+      expect(eventRelevanceFingerprint({ ...base, ...changed })).not.toBe(
+        eventRelevanceFingerprint(base)
+      );
+    }
     expect(
       profileRelevanceFingerprint({
         positive: ["AI", "climate"],

@@ -141,6 +141,18 @@ LIVE_CONNECTOR_SMOKE=guild pnpm exec vitest run packages/connector-guild/test/li
 
 Run one at a time. A source may report `auth_required` or `user_action_required`; use the dedicated Chrome window to resolve it, then retry.
 
+To compare each direct connector with its browser implementation using only
+aggregate counts and canonical-link overlap, run these sequentially:
+
+```bash
+LIVE_DIRECT_PARITY=eventbrite pnpm exec vitest run test/live/direct-parity.test.ts
+LIVE_DIRECT_PARITY=luma pnpm exec vitest run test/live/direct-parity.test.ts
+LIVE_DIRECT_PARITY=meetup pnpm exec vitest run test/live/direct-parity.test.ts
+```
+
+The latest sanitized end-to-end run is recorded in
+[`docs/acceptance/2026-08-10-live-search.md`](docs/acceptance/2026-08-10-live-search.md).
+
 ## Repairing a connector
 
 Each adapter has a network-contract note in `docs/connectors`, sanitized fixtures, parser tests, connector tests, a fixture-safety test, and an opt-in live smoke test.

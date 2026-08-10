@@ -13,7 +13,8 @@ function memoryStore(): SearchStore {
     createSearch: () => undefined,
     setSearchStatus: () => undefined,
     upsertSource: () => undefined,
-    saveEvent: () => undefined
+    saveEvent: () => undefined,
+    removeEvent: () => undefined
   };
 }
 

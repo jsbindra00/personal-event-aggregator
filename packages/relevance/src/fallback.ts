@@ -7,6 +7,7 @@ import {
   type InterestProfile,
   type NormalizedEvent,
   type RelevanceDecision,
+  type RelevanceEvaluation,
   type RelevanceStatus
 } from "@event-agg/core";
 
@@ -44,11 +45,6 @@ export function createResilientRelevanceEvaluator(
 class ResilientRelevanceEvaluator implements EventRelevanceEvaluator {
   readonly fingerprint: string;
 
-  private currentStatus: RelevanceStatus | null = null;
-  private lastPrimaryStatus: RelevanceStatus | null = null;
-  private usedFallback = false;
-  private safeFailure: string | null = null;
-
   constructor(
     private readonly primary: EventRelevanceEvaluator,
     private readonly fallback: EventRelevanceEvaluator
@@ -61,9 +57,18 @@ class ResilientRelevanceEvaluator implements EventRelevanceEvaluator {
     profile: InterestProfile,
     signal: AbortSignal
   ): Promise<RelevanceDecision[]> {
+    return (await this.evaluateWithStatus(events, profile, signal)).decisions;
+  }
+
+  async evaluateWithStatus(
+    events: readonly NormalizedEvent[],
+    profile: InterestProfile,
+    signal: AbortSignal
+  ): Promise<RelevanceEvaluation> {
     signal.throwIfAborted();
-    this.usedFallback = false;
-    this.safeFailure = null;
+    let usedFallback = false;
+    let safeFailure: string | null = null;
+    let primaryStatus: RelevanceStatus | null = null;
     const decisions = new Map<string, RelevanceDecision>();
     const candidates: NormalizedEvent[] = [];
     for (const event of events) {
@@ -76,30 +81,28 @@ class ResilientRelevanceEvaluator implements EventRelevanceEvaluator {
 
     if (candidates.length > 0) {
       try {
-        for (const decision of await this.primary.evaluate(
-          candidates,
-          profile,
-          signal
-        )) {
+        const result = await this.evaluatePrimary(candidates, profile, signal);
+        primaryStatus = result.status;
+        for (const decision of result.decisions) {
           decisions.set(decision.eventId, decision);
         }
       } catch (error) {
         this.throwIfCancelled(signal, error);
-        await this.rememberFailure(error, signal);
+        ({ safeFailure, primaryStatus } = await this.failureDetails(error, signal));
         const halves = split(candidates);
         for (const half of halves) {
           try {
-            for (const decision of await this.primary.evaluate(
-              half,
-              profile,
-              signal
-            )) {
+            const result = await this.evaluatePrimary(half, profile, signal);
+            primaryStatus = result.status;
+            for (const decision of result.decisions) {
               decisions.set(decision.eventId, decision);
             }
           } catch (halfError) {
             this.throwIfCancelled(signal, halfError);
-            await this.rememberFailure(halfError, signal);
-            this.usedFallback = true;
+            const failure = await this.failureDetails(halfError, signal);
+            safeFailure = failure.safeFailure;
+            primaryStatus = failure.primaryStatus ?? primaryStatus;
+            usedFallback = true;
             for (const decision of await this.fallback.evaluate(
               half,
               profile,
@@ -119,44 +122,68 @@ class ResilientRelevanceEvaluator implements EventRelevanceEvaluator {
       }
       return corroborateModelShow(event, profile, decision);
     });
-    this.currentStatus = summarize(
-      this.usedFallback ? "fallback" : "complete",
+    const status = summarize(
+      usedFallback ? "fallback" : "complete",
       ordered,
-      this.lastPrimaryStatus?.model ?? null,
-      this.usedFallback ? this.safeFailure : null
+      primaryStatus?.model ?? null,
+      usedFallback ? safeFailure : null
     );
-    return ordered;
+    return { decisions: ordered, status: { ...status } };
   }
 
   async status(signal?: AbortSignal): Promise<RelevanceStatus> {
-    if (this.currentStatus !== null) return { ...this.currentStatus };
     const status = await this.primary.status(signal);
-    this.lastPrimaryStatus = status;
     return { ...status, evaluator: "resilient" };
+  }
+
+  private async evaluatePrimary(
+    events: readonly NormalizedEvent[],
+    profile: InterestProfile,
+    signal: AbortSignal
+  ): Promise<RelevanceEvaluation> {
+    if (this.primary.evaluateWithStatus !== undefined) {
+      return this.primary.evaluateWithStatus(events, profile, signal);
+    }
+    const decisions = await this.primary.evaluate(events, profile, signal);
+    let status: RelevanceStatus;
+    try {
+      status = await this.primary.status(signal);
+    } catch (error) {
+      this.throwIfCancelled(signal, error);
+      status = summarize("complete", decisions, null, null);
+    }
+    return { decisions, status };
   }
 
   private throwIfCancelled(signal: AbortSignal, error: unknown): void {
     if (signal.aborted) throw signal.reason ?? error;
   }
 
-  private async rememberFailure(
+  private async failureDetails(
     error: unknown,
     signal: AbortSignal
-  ): Promise<void> {
+  ): Promise<{
+    safeFailure: string;
+    primaryStatus: RelevanceStatus | null;
+  }> {
     if (error instanceof OllamaEvaluationError) {
-      this.safeFailure = error.message;
-      return;
+      return { safeFailure: error.message, primaryStatus: null };
     }
     try {
       const status = await this.primary.status(signal);
-      this.lastPrimaryStatus = status;
-      this.safeFailure =
-        status.safeMessage ??
-        "Local relevance model was unavailable; using strict fallback";
+      return {
+        safeFailure:
+          status.safeMessage ??
+          "Local relevance model was unavailable; using strict fallback",
+        primaryStatus: status
+      };
     } catch (statusError) {
       this.throwIfCancelled(signal, statusError);
-      this.safeFailure =
-        "Local relevance model was unavailable; using strict fallback";
+      return {
+        safeFailure:
+          "Local relevance model was unavailable; using strict fallback",
+        primaryStatus: null
+      };
     }
   }
 }

@@ -280,6 +280,10 @@ export function buildEventMcpServer(
       extra.signal.addEventListener("abort", cancel, { once: true });
       let step = 0;
       try {
+        if (extra.signal.aborted) {
+          cancel();
+          throw extra.signal.reason ?? new Error("Event search cancelled");
+        }
         await progress(extra, step, "Search started");
         for await (const message of dependencies.searchService.subscribe(searchId)) {
           step += 1;

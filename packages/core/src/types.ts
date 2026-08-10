@@ -91,6 +91,11 @@ export interface RelevanceStatus {
   safeMessage: string | null;
 }
 
+export interface RelevanceEvaluation {
+  decisions: RelevanceDecision[];
+  status: RelevanceStatus;
+}
+
 export interface EventRelevanceEvaluator {
   readonly fingerprint: string;
   evaluate(
@@ -98,6 +103,11 @@ export interface EventRelevanceEvaluator {
     profile: InterestProfile,
     signal: AbortSignal
   ): Promise<RelevanceDecision[]>;
+  evaluateWithStatus?(
+    events: readonly NormalizedEvent[],
+    profile: InterestProfile,
+    signal: AbortSignal
+  ): Promise<RelevanceEvaluation>;
   status(signal?: AbortSignal): Promise<RelevanceStatus>;
 }
 

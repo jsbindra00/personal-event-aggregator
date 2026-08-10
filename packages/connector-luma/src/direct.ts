@@ -94,7 +94,7 @@ class DirectLumaConnector implements EventConnector {
       signal.throwIfAborted();
       const place = await withConnectorRetry(
         () => resolveLumaPlace(query.locationText, this.fetch, signal),
-        this.retry
+        { ...this.retry, signal }
       );
       if (place === null) {
         throw connectorFailure(
@@ -122,7 +122,7 @@ class DirectLumaConnector implements EventConnector {
               API_POLICY,
               signal
             ),
-          this.retry
+          { ...this.retry, signal }
         );
         const page = parseLumaSearchPayload(payload);
         let latestStart = Number.NEGATIVE_INFINITY;

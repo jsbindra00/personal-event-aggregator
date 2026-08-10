@@ -47,6 +47,7 @@ export interface SearchStore {
     rank: number,
     replacesEventId?: string
   ): void;
+  removeEvent(searchId: string, eventId: string): void;
 }
 
 export interface RelevanceCache {
@@ -181,7 +182,7 @@ class DefaultSearchService implements SearchService {
     const currentInterests = this.getInterests();
     const searchId = this.createId();
     const createdAt = this.now().toISOString();
-    const relevance = await this.initialRelevanceStatus();
+    const relevance = this.initialRelevanceStatus();
     const run: SearchRun = {
       searchId,
       query,
@@ -224,6 +225,7 @@ class DefaultSearchService implements SearchService {
       this.persistSource(run, connector.source);
     }
     this.emit(run, { type: "search.started", relevance: { ...run.relevance } });
+    void this.refreshInitialRelevanceStatus(run);
 
     if (this.connectors.length === 0) {
       this.finishSearch(run);
@@ -300,10 +302,32 @@ class DefaultSearchService implements SearchService {
     }
   }
 
-  private async initialRelevanceStatus(): Promise<RelevanceStatus> {
+  private initialRelevanceStatus(): RelevanceStatus {
+    return {
+      state: "ready",
+      evaluator: "configured",
+      model: null,
+      evaluatedCount: 0,
+      showCount: 0,
+      maybeCount: 0,
+      hideCount: 0,
+      safeMessage: null
+    };
+  }
+
+  private async refreshInitialRelevanceStatus(run: SearchRun): Promise<void> {
     try {
-      const status = await this.relevanceEvaluator.status();
-      return {
+      const status = await this.relevanceEvaluator.status(
+        run.relevanceController.signal
+      );
+      if (
+        run.status !== "running" ||
+        run.relevance.state !== "ready" ||
+        run.evaluatedIds.size > 0
+      ) {
+        return;
+      }
+      run.relevance = {
         ...status,
         evaluatedCount: 0,
         showCount: 0,
@@ -311,7 +335,8 @@ class DefaultSearchService implements SearchService {
         hideCount: 0
       };
     } catch {
-      return {
+      if (run.status !== "running" || run.evaluatedIds.size > 0) return;
+      run.relevance = {
         state: "unavailable",
         evaluator: "unknown",
         model: null,
@@ -450,32 +475,18 @@ class DefaultSearchService implements SearchService {
     );
     if (duplicate !== undefined) {
       event = { ...mergeDuplicate(duplicate, event), id: duplicate.id };
-      if (run.evaluatedIds.has(duplicate.id)) {
-        event = preserveRelevance(event, duplicate);
-        run.candidateEvents.set(event.id, event);
-        if (event.relevanceDecision === "show") {
-          run.events.set(event.id, event);
-          this.persistRankedEvents(run);
-          this.emit(run, { type: "event.updated", source: message.source, event });
-        } else if (event.relevanceDecision === "maybe") {
-          run.maybeEvents.set(event.id, event);
-          this.persistRankedEvents(run);
-          this.emit(run, { type: "event.maybe", source: message.source, event });
-        }
-        return false;
-      }
     }
 
     const version = (run.candidateVersions.get(event.id) ?? 0) + 1;
     run.candidateEvents.set(event.id, event);
     run.candidateVersions.set(event.id, version);
     if (isEventExcluded(event, run.interests)) {
-      const excluded = applyRelevanceDecision(
+      this.applyEvaluatedEvent(
+        run,
+        message.source,
         event,
         strictLexicalDecision(event, run.interests)
       );
-      run.candidateEvents.set(event.id, excluded);
-      run.evaluatedIds.add(event.id);
       this.updateRelevanceCounts(run);
       return false;
     }
@@ -509,7 +520,10 @@ class DefaultSearchService implements SearchService {
       cached = null;
     }
     if (cached !== null) {
-      this.applyEvaluatedEvent(run, source, event, cached);
+      this.applyEvaluatedEvent(run, source, event, {
+        ...cached,
+        eventId: event.id
+      });
       this.updateRelevanceCounts(run);
       this.emit(run, {
         type: "relevance.progress",
@@ -565,15 +579,26 @@ class DefaultSearchService implements SearchService {
       let decisions: RelevanceDecision[];
       let evaluatorStatus: RelevanceStatus | null = null;
       try {
-        decisions = await this.relevanceEvaluator.evaluate(
-          batch.map(({ event }) => event),
-          run.interests,
-          run.relevanceController.signal
-        );
+        const events = batch.map(({ event }) => event);
+        if (this.relevanceEvaluator.evaluateWithStatus !== undefined) {
+          const result = await this.relevanceEvaluator.evaluateWithStatus(
+            events,
+            run.interests,
+            run.relevanceController.signal
+          );
+          decisions = result.decisions;
+          evaluatorStatus = result.status;
+        } else {
+          decisions = await this.relevanceEvaluator.evaluate(
+            events,
+            run.interests,
+            run.relevanceController.signal
+          );
+          evaluatorStatus = await this.relevanceEvaluator.status(
+            run.relevanceController.signal
+          );
+        }
         decisions = validateDecisionBatch(batch, decisions);
-        evaluatorStatus = await this.relevanceEvaluator.status(
-          run.relevanceController.signal
-        );
       } catch (error) {
         if (run.status !== "running" || run.relevanceController.signal.aborted) {
           this.releaseBatch(run, batch);
@@ -644,6 +669,8 @@ class DefaultSearchService implements SearchService {
   ): void {
     if (run.status !== "running") return;
     const evaluated = applyRelevanceDecision(event, decision);
+    const wasPublished =
+      run.events.has(evaluated.id) || run.maybeEvents.has(evaluated.id);
     run.candidateEvents.set(evaluated.id, evaluated);
     run.evaluatedIds.add(evaluated.id);
     if (evaluated.relevanceDecision === "show") {
@@ -661,6 +688,14 @@ class DefaultSearchService implements SearchService {
       run.maybeEvents.set(evaluated.id, evaluated);
       this.persistRankedEvents(run);
       this.emit(run, { type: "event.maybe", source, event: evaluated });
+    } else {
+      run.events.delete(evaluated.id);
+      run.maybeEvents.delete(evaluated.id);
+      if (wasPublished) {
+        this.store.removeEvent(run.searchId, evaluated.id);
+        this.persistRankedEvents(run);
+        this.emit(run, { type: "event.updated", source, event: evaluated });
+      }
     }
   }
 
@@ -877,20 +912,6 @@ function validateDecisionBatch(
     applyRelevanceDecision(event, decision);
     return decision;
   });
-}
-
-function preserveRelevance(
-  event: NormalizedEvent,
-  evaluated: NormalizedEvent
-): NormalizedEvent {
-  return {
-    ...event,
-    relevanceDecision: evaluated.relevanceDecision,
-    relevanceScore: evaluated.relevanceScore,
-    relevanceConfidence: evaluated.relevanceConfidence,
-    relevanceReason: evaluated.relevanceReason,
-    matchedInterests: [...evaluated.matchedInterests]
-  };
 }
 
 function positiveInteger(value: number, name: string): number {

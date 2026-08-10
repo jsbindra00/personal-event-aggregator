@@ -80,4 +80,33 @@ describe("withConnectorRetry", () => {
       }))
     ).toMatchObject({ code: "network" });
   });
+
+  it("aborts the default backoff without starting another attempt", async () => {
+    const controller = new AbortController();
+    let attempts = 0;
+    const retrying = withConnectorRetry(
+      async () => {
+        attempts += 1;
+        throw connectorFailure("network", "temporary network failure");
+      },
+      {
+        maxAttempts: 3,
+        baseDelayMs: 10_000,
+        jitterRatio: 0,
+        signal: controller.signal
+      }
+    );
+    await vi.waitFor(() => expect(attempts).toBe(1));
+    controller.abort(new Error("search cancelled"));
+
+    await expect(
+      Promise.race([
+        retrying,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("backoff did not abort")), 50)
+        )
+      ])
+    ).rejects.toThrow("search cancelled");
+    expect(attempts).toBe(1);
+  });
 });

@@ -41,6 +41,7 @@ export type {
   ConnectorStatus,
   EventConnector,
   EventRelevanceEvaluator,
+  RelevanceEvaluation,
   EventSearchQuery,
   EventSource,
   InterestProfile,

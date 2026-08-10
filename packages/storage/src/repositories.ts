@@ -265,6 +265,12 @@ export class EventRepository {
       );
   }
 
+  public unlinkFromSearch(searchId: string, eventId: string): void {
+    this.database
+      .prepare("delete from search_events where search_id = ? and event_id = ?")
+      .run(searchId, eventId);
+  }
+
   public listForSearch(
     searchId: string,
     decision?: RelevanceDecisionKind
@@ -381,14 +387,27 @@ export class RelevanceCacheRepository {
 export function eventRelevanceFingerprint(event: NormalizedEvent): string {
   return sha256(
     JSON.stringify({
-      canonicalUrl: event.canonicalUrl,
-      title: event.title,
-      descriptionText: event.descriptionText,
-      organizerName: event.organizerName,
-      venueName: event.venueName,
+      title: boundedFingerprintValue(event.title, 240),
+      startsAt: event.startsAt,
+      endsAt: event.endsAt,
+      timeZone: event.timeZone,
+      description: boundedFingerprintValue(event.descriptionText, 1_500),
+      organizer: boundedFingerprintValue(event.organizerName, 240),
+      venue: boundedFingerprintValue(event.venueName, 240),
+      address: boundedFingerprintValue(event.addressText, 240),
+      isOnline: event.isOnline,
       tags: event.tags
+        .slice(0, 20)
+        .map((tag) => boundedFingerprintValue(tag, 80))
     })
   );
+}
+
+function boundedFingerprintValue(
+  value: string | null,
+  limit: number
+): string | null {
+  return value === null ? null : value.slice(0, limit);
 }
 
 export function profileRelevanceFingerprint(profile: InterestProfile): string {

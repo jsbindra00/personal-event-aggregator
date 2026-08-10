@@ -95,12 +95,14 @@ class FakeSearchService implements SearchService {
   public readonly inputs: EventSearchQuery[] = [];
   public readonly cancelled: string[] = [];
   public hang = false;
+  public startGate: Promise<void> | null = null;
   private readonly snapshots = new Map<string, SearchSnapshot>();
   private readonly releases = new Map<string, () => void>();
   private sequence = 0;
 
   public async start(input: EventSearchQuery): Promise<{ searchId: string }> {
     this.inputs.push(input);
+    if (this.startGate !== null) await this.startGate;
     const searchId = `search-${++this.sequence}`;
     this.snapshots.set(searchId, {
       searchId,
@@ -384,6 +386,32 @@ describe("event aggregator MCP server", () => {
     controller.abort();
 
     await expect(call).rejects.toThrow();
+    await vi.waitFor(() =>
+      expect(searchService.cancelled).toContain("search-1")
+    );
+  });
+
+  it("cancels when the tool signal aborts while search startup is pending", async () => {
+    const { client, searchService } = await fixture();
+    searchService.hang = true;
+    let releaseStart!: () => void;
+    searchService.startGate = new Promise<void>((resolve) => {
+      releaseStart = resolve;
+    });
+    const controller = new AbortController();
+
+    const outcome = client
+      .callTool(
+        { name: "search_events", arguments: { ...query } },
+        undefined,
+        { signal: controller.signal }
+      )
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => expect(searchService.inputs).toHaveLength(1));
+    controller.abort();
+    releaseStart();
+
+    await outcome;
     await vi.waitFor(() =>
       expect(searchService.cancelled).toContain("search-1")
     );

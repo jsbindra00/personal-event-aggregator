@@ -101,13 +101,16 @@ class EventbriteConnector implements EventConnector {
         this.contract.connectUrl
       );
       await enforceReadOnlyEventbritePage(page);
-      const payload = await withConnectorRetry(async () => {
-        try {
-          return await this.readPayload(page, query, this.contract);
-        } catch (error) {
-          throw classifyConnectorError(error);
-        }
-      });
+      const payload = await withConnectorRetry(
+        async () => {
+          try {
+            return await this.readPayload(page, query, this.contract);
+          } catch (error) {
+            throw classifyConnectorError(error);
+          }
+        },
+        { signal }
+      );
       signal.throwIfAborted();
       const events = parseEventbriteSearchPayload(payload);
       let count = 0;

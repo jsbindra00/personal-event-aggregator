@@ -139,7 +139,9 @@ export function createProductionDependencies(
     saveEvent: (searchId, event, rank) => {
       repositories.events.upsert(event);
       repositories.events.linkToSearch(searchId, event, rank);
-    }
+    },
+    removeEvent: (searchId, eventId) =>
+      repositories.events.unlinkFromSearch(searchId, eventId)
   };
   const relevanceEvaluator =
     options.relevanceEvaluator ??

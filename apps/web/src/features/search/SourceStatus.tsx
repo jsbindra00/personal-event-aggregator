@@ -22,15 +22,15 @@ export function SourceStatus({ statuses, onConnect }: SourceStatusProps) {
             <span className="source-dot" aria-hidden="true" />
             <strong>{sourceNames[source]}</strong>
             <span>{(status?.state ?? "disconnected").replaceAll("_", " ")}</span>
-            {actionFor(status) && (
+            {actionFor(source, status) && (
               <button
                 type="button"
                 className="source-action"
-                aria-label={`${actionFor(status)} ${sourceNames[source]}`}
+                aria-label={`${actionFor(source, status)} ${sourceNames[source]}`}
                 title={status?.safeMessage ?? undefined}
                 onClick={() => void onConnect(source)}
               >
-                {actionFor(status)}
+                {actionFor(source, status)}
               </button>
             )}
           </div>
@@ -40,8 +40,12 @@ export function SourceStatus({ statuses, onConnect }: SourceStatusProps) {
   );
 }
 
-function actionFor(status: ConnectorStatus | undefined): string | null {
+function actionFor(
+  source: EventSource,
+  status: ConnectorStatus | undefined
+): string | null {
   const state = status?.state ?? "disconnected";
+  if (source === "guild" && state === "failed") return "Why unavailable";
   if (state === "disconnected") return "Connect";
   if (state === "auth_required") return "Sign in again";
   if (state === "failed" || state === "user_action_required") {

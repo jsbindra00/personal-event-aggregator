@@ -79,7 +79,21 @@ export async function requestBoundedText(
     );
   }
 
-  return readLimitedUtf8(response.body, policy.maxBodyBytes);
+  try {
+    return await readLimitedUtf8(
+      response.body,
+      policy.maxBodyBytes,
+      combined
+    );
+  } catch (error) {
+    if (signal.aborted) throw signal.reason ?? error;
+    if (timeout.aborted) {
+      throw connectorFailure("network", "Event source request timed out", {
+        cause: error
+      });
+    }
+    throw error;
+  }
 }
 
 export async function requestBoundedJson(
@@ -99,15 +113,22 @@ export async function requestBoundedJson(
 
 async function readLimitedUtf8(
   body: ReadableStream<Uint8Array>,
-  maxBodyBytes: number
+  maxBodyBytes: number,
+  signal: AbortSignal
 ): Promise<string> {
   const reader = body.getReader();
+  const cancelReader = () => {
+    void reader.cancel(signal.reason).catch(() => undefined);
+  };
+  signal.addEventListener("abort", cancelReader, { once: true });
   const decoder = new TextDecoder("utf-8", { fatal: true });
   let received = 0;
   let text = "";
   try {
     while (true) {
+      signal.throwIfAborted();
       const result = await reader.read();
+      signal.throwIfAborted();
       if (result.done) break;
       received += result.value.byteLength;
       if (received > maxBodyBytes) {
@@ -122,11 +143,13 @@ async function readLimitedUtf8(
     text += decoder.decode();
     return text;
   } catch (error) {
+    if (signal.aborted) throw signal.reason ?? error;
     if (error instanceof ConnectorFailure) throw error;
     throw connectorFailure("parsing", "Event source returned invalid text", {
       cause: error
     });
   } finally {
+    signal.removeEventListener("abort", cancelReader);
     reader.releaseLock();
   }
 }

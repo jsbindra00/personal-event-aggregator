@@ -4,6 +4,7 @@ import {
   type InterestProfile,
   type NormalizedEvent,
   type RelevanceDecision,
+  type RelevanceEvaluation,
   type RelevanceStatus
 } from "@event-agg/core";
 import { z } from "zod";
@@ -70,10 +71,18 @@ class OllamaRelevanceEvaluator implements EventRelevanceEvaluator {
     profile: InterestProfile,
     signal: AbortSignal
   ): Promise<RelevanceDecision[]> {
+    return (await this.evaluateWithStatus(events, profile, signal)).decisions;
+  }
+
+  async evaluateWithStatus(
+    events: readonly NormalizedEvent[],
+    profile: InterestProfile,
+    signal: AbortSignal
+  ): Promise<RelevanceEvaluation> {
     signal.throwIfAborted();
     if (events.length === 0) {
       this.currentStatus = emptyStatus("complete", this.model, null);
-      return [];
+      return { decisions: [], status: { ...this.currentStatus } };
     }
     this.currentStatus = {
       ...emptyStatus("evaluating", this.model, null),
@@ -120,7 +129,7 @@ class OllamaRelevanceEvaluator implements EventRelevanceEvaluator {
         eventId: events[index]!.id
       }));
       this.currentStatus = summarize("complete", this.model, ordered, null);
-      return ordered;
+      return { decisions: ordered, status: { ...this.currentStatus } };
     } catch (error) {
       if (signal.aborted) throw signal.reason ?? error;
       const safe =

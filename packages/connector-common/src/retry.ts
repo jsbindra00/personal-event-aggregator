@@ -29,6 +29,7 @@ export interface ConnectorRetryOptions {
   jitterRatio?: number;
   sleep?: (delayMs: number) => Promise<void>;
   random?: () => number;
+  signal?: AbortSignal;
 }
 
 export function connectorFailure(
@@ -90,11 +91,14 @@ export async function withConnectorRetry<T>(
   const jitterRatio = boundedRatio(options.jitterRatio ?? 0.2);
   const sleep = options.sleep ?? defaultSleep;
   const random = options.random ?? Math.random;
+  const signal = options.signal;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    signal?.throwIfAborted();
     try {
       return await action(attempt);
     } catch (error) {
+      if (signal?.aborted) throw signal.reason ?? error;
       const retryable =
         error instanceof ConnectorFailure &&
         (error.code === "network" || error.code === "rate_limited");
@@ -105,15 +109,36 @@ export async function withConnectorRetry<T>(
         error.retryAfterMs ?? baseDelayMs * 2 ** (attempt - 1)
       );
       const jitter = 1 + (random() * 2 - 1) * jitterRatio;
-      await sleep(Math.max(0, Math.round(exponential * jitter)));
+      const delayMs = Math.max(0, Math.round(exponential * jitter));
+      if (options.sleep === undefined) {
+        await defaultSleep(delayMs, signal);
+      } else {
+        await sleep(delayMs);
+      }
     }
   }
 
   throw new Error("connector retry exhausted unexpectedly");
 }
 
-async function defaultSleep(delayMs: number): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+async function defaultSleep(
+  delayMs: number,
+  signal?: AbortSignal
+): Promise<void> {
+  signal?.throwIfAborted();
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(finish, delayMs);
+    const abort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      reject(signal?.reason ?? new Error("Connector retry cancelled"));
+    };
+    function finish() {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 }
 
 function positiveInteger(value: number, name: string): number {

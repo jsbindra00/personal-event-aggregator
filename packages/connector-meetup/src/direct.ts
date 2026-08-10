@@ -213,7 +213,7 @@ class DirectMeetupConnector implements EventConnector {
           GRAPHQL_POLICY,
           signal
         ),
-      this.retry
+      { ...this.retry, signal }
     );
   }
 

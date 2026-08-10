@@ -94,12 +94,14 @@ class DirectEventbriteConnector implements EventConnector {
           `Eventbrite needs a supported city for ${query.locationText}`
         );
       }
-      const html = await withConnectorRetry(() =>
-        requestBoundedText(
-          { url, fetch: this.fetch },
-          this.policy,
-          signal
-        )
+      const html = await withConnectorRetry(
+        () =>
+          requestBoundedText(
+            { url, fetch: this.fetch },
+            this.policy,
+            signal
+          ),
+        { signal }
       );
       signal.throwIfAborted();
       const events = parseEventbriteSearchPayload(

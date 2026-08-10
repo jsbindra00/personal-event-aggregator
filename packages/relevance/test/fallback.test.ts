@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   createLexicalRelevanceEvaluator,
-  createResilientRelevanceEvaluator
+  createResilientRelevanceEvaluator,
+  OllamaEvaluationError
 } from "../src/index.js";
 import { decision, event, profile } from "./factories.js";
 
@@ -30,11 +31,14 @@ describe("resilient relevance evaluation", () => {
     });
     const resilient = createResilientRelevanceEvaluator(primary, fallback);
 
-    await expect(
-      resilient.evaluate(batch, profile, new AbortController().signal)
-    ).resolves.toHaveLength(4);
+    const result = await resilient.evaluateWithStatus?.(
+      batch,
+      profile,
+      new AbortController().signal
+    );
+    expect(result?.decisions).toHaveLength(4);
     expect(sizes).toEqual([4, 2, 2]);
-    await expect(resilient.status()).resolves.toMatchObject({
+    expect(result?.status).toMatchObject({
       state: "complete",
       evaluatedCount: 4,
       safeMessage: null
@@ -75,16 +79,50 @@ describe("resilient relevance evaluation", () => {
     });
     const resilient = createResilientRelevanceEvaluator(primary, fallback);
 
-    await resilient.evaluate(batch, profile, new AbortController().signal);
+    const result = await resilient.evaluateWithStatus?.(
+      batch,
+      profile,
+      new AbortController().signal
+    );
 
     expect(fallbackIds).toEqual([["event:3", "event:4"]]);
-    await expect(resilient.status()).resolves.toMatchObject({
+    expect(result?.status).toMatchObject({
       state: "fallback",
       safeMessage: "Local relevance model returned an invalid response"
     });
-    expect(JSON.stringify(await resilient.status())).not.toContain(
+    expect(JSON.stringify(result?.status)).not.toContain(
       "private model response"
     );
+  });
+
+  it("does not add readiness probes to known Ollama inference failures", async () => {
+    let statusCalls = 0;
+    const primary: EventRelevanceEvaluator = {
+      fingerprint: "ollama:test-model:prompt-v1",
+      async evaluate() {
+        throw new OllamaEvaluationError("Local relevance model timed out");
+      },
+      async status() {
+        statusCalls += 1;
+        throw new Error("readiness endpoint also stalled");
+      }
+    };
+    const resilient = createResilientRelevanceEvaluator(
+      primary,
+      createLexicalRelevanceEvaluator()
+    );
+
+    const result = await resilient.evaluateWithStatus?.(
+      [event({ id: "event:timeout" })],
+      profile,
+      new AbortController().signal
+    );
+
+    expect(statusCalls).toBe(0);
+    expect(result?.status).toMatchObject({
+      state: "fallback",
+      safeMessage: "Local relevance model timed out"
+    });
   });
 
   it("does not send hard exclusions to the model", async () => {
@@ -177,6 +215,69 @@ describe("resilient relevance evaluation", () => {
       decision: "maybe",
       score: 69,
       matchedInterests: []
+    });
+  });
+
+  it("keeps fallback status isolated across concurrent evaluations", async () => {
+    let releaseFailure!: () => void;
+    const failureGate = new Promise<void>((resolve) => {
+      releaseFailure = resolve;
+    });
+    let announceFailure!: () => void;
+    const failureStarted = new Promise<void>((resolve) => {
+      announceFailure = resolve;
+    });
+    let failingAttempts = 0;
+    const primary = evaluator(async (events) => {
+      if (events[0]?.id === "event:fallback") {
+        failingAttempts += 1;
+        if (failingAttempts === 1) {
+          announceFailure();
+          await failureGate;
+        }
+        throw new Error("model failed for this search only");
+      }
+      return events.map(({ id }) => decision(id));
+    });
+    const fallback = evaluator(async (events) =>
+      events.map(({ id }) =>
+        decision(id, {
+          decision: "hide",
+          score: 0,
+          confidence: 1,
+          matchedInterests: [],
+          reason: "Strict fallback found no match"
+        })
+      )
+    );
+    const resilient = createResilientRelevanceEvaluator(primary, fallback);
+    const evaluateWithStatus = resilient.evaluateWithStatus?.bind(resilient);
+    expect(evaluateWithStatus).toBeDefined();
+    if (evaluateWithStatus === undefined) return;
+
+    const fallbackRun = evaluateWithStatus(
+      [event({ id: "event:fallback" })],
+      profile,
+      new AbortController().signal
+    );
+    await failureStarted;
+    const healthyRun = await evaluateWithStatus(
+      [event({ id: "event:healthy" })],
+      profile,
+      new AbortController().signal
+    );
+    releaseFailure();
+    const failedRun = await fallbackRun;
+
+    expect(healthyRun.status).toMatchObject({
+      state: "complete",
+      evaluatedCount: 1,
+      safeMessage: null
+    });
+    expect(failedRun.status).toMatchObject({
+      state: "fallback",
+      evaluatedCount: 1,
+      safeMessage: "Local relevance model was unavailable; using strict fallback"
     });
   });
 

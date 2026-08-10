@@ -61,6 +61,21 @@ export function useEventSearch(api: EventApi) {
           return next;
         });
       }
+      if (
+        message.type === "event.updated" &&
+        message.event?.relevanceDecision === "hide"
+      ) {
+        setEventMap((current) => {
+          const next = new Map(current);
+          next.delete(message.event!.id);
+          return next;
+        });
+        setMaybeEventMap((current) => {
+          const next = new Map(current);
+          next.delete(message.event!.id);
+          return next;
+        });
+      }
       if (message.type === "event.maybe" && message.event) {
         setMaybeEventMap((current) => {
           const next = new Map(current);

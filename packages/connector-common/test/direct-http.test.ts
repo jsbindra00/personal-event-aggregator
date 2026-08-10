@@ -76,4 +76,31 @@ describe("bounded direct HTTP", () => {
       )
     ).rejects.toMatchObject({ code: "rate_limited", retryAfterMs: 2_000 });
   });
+
+  it("classifies a body stall that reaches the deadline as a network timeout", async () => {
+    await expect(
+      requestBoundedText(
+        {
+          url: "https://api.example.test/events",
+          fetch: async (_input, init) =>
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  init?.signal?.addEventListener(
+                    "abort",
+                    () => controller.error(init.signal?.reason),
+                    { once: true }
+                  );
+                }
+              })
+            )
+        },
+        { ...policy, timeoutMs: 5 },
+        signal
+      )
+    ).rejects.toMatchObject({
+      code: "network",
+      message: "Event source request timed out"
+    });
+  });
 });

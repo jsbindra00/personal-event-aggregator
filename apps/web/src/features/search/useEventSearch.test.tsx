@@ -69,6 +69,44 @@ describe("useEventSearch", () => {
     );
   });
 
+  it("removes an event when richer evidence changes it to hide", async () => {
+    const api = createTestEventApi();
+    const { result } = renderHook(() => useEventSearch(api));
+    await act(() =>
+      result.current.start({
+        locationText: "London",
+        startDate: "2026-08-10",
+        endDate: "2026-08-12",
+        timeZone: "Europe/London"
+      })
+    );
+
+    act(() => {
+      api.emit({
+        sequence: 2,
+        searchId: "search-1",
+        type: "event.added",
+        source: "luma",
+        event: baseEvent
+      });
+      api.emit({
+        sequence: 3,
+        searchId: "search-1",
+        type: "event.updated",
+        source: "meetup",
+        event: {
+          ...baseEvent,
+          relevanceDecision: "hide",
+          relevanceScore: 3,
+          relevanceReason: "Richer source data ruled it out"
+        }
+      });
+    });
+
+    expect(result.current.events).toEqual([]);
+    expect(result.current.maybeEvents).toEqual([]);
+  });
+
   it("cancels an active search before starting its replacement", async () => {
     const api = createTestEventApi();
     const { result } = renderHook(() => useEventSearch(api));

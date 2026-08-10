@@ -95,8 +95,10 @@ class LumaConnector implements EventConnector {
       signal.throwIfAborted();
       const page = await this.browserHost.pageFor("luma", this.contract.connectUrl);
       await enforceReadOnlyLumaPage(page);
-      let payloads = await this.capture(page, () =>
-        this.contract.performSearch(page, query)
+      let payloads = await this.capture(
+        page,
+        () => this.contract.performSearch(page, query),
+        signal
       );
       const seenEvents = new Set<string>();
       const seenCursors = new Set<string>();
@@ -142,7 +144,11 @@ class LumaConnector implements EventConnector {
           break;
         }
         seenCursors.add(nextCursor);
-        payloads = await this.capture(page, () => this.scrollForNextPage(page));
+        payloads = await this.capture(
+          page,
+          () => this.scrollForNextPage(page),
+          signal
+        );
       }
 
       this.setStatus("complete", { lastSuccessAt: new Date().toISOString() });
@@ -156,7 +162,11 @@ class LumaConnector implements EventConnector {
     }
   }
 
-  private capture(page: Page, action: () => Promise<unknown>): Promise<unknown[]> {
+  private capture(
+    page: Page,
+    action: () => Promise<unknown>,
+    signal: AbortSignal
+  ): Promise<unknown[]> {
     return withConnectorRetry(
       async () => {
         try {
@@ -173,7 +183,7 @@ class LumaConnector implements EventConnector {
           throw classifyConnectorError(error);
         }
       },
-      { maxAttempts: 3 }
+      { maxAttempts: 3, signal }
     );
   }
 
