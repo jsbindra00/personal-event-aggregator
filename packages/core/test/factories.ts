@@ -22,10 +22,12 @@ export function eventFixture(
     imageUrl: null,
     priceText: null,
     tags: [],
+    relevanceDecision: "maybe",
     relevanceScore: 0,
+    relevanceConfidence: 0,
+    relevanceReason: "Awaiting relevance evaluation",
     matchedInterests: [],
     firstSeenAt: "2026-08-10T00:00:00.000Z",
     ...overrides
   };
 }
-

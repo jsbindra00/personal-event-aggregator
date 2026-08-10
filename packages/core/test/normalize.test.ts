@@ -51,6 +51,9 @@ describe("normalizeEvent", () => {
       descriptionText: "Hello builders",
       endsAt: null,
       tags: [],
+      relevanceDecision: "maybe",
+      relevanceConfidence: 0,
+      relevanceReason: "Awaiting relevance evaluation",
       firstSeenAt: "2026-08-10T00:00:00.000Z"
     });
   });

@@ -10,7 +10,10 @@ export { redactDiagnostic } from "./redact.js";
 export {
   eventSearchQuerySchema,
   eventSourceSchema,
-  interestProfileSchema
+  interestProfileSchema,
+  relevanceDecisionKindSchema,
+  relevanceDecisionSchema,
+  relevanceStatusSchema
 } from "./schemas.js";
 export {
   MATCH_WEIGHTS,
@@ -19,6 +22,12 @@ export {
   sortRankedEvents
 } from "./rank.js";
 export { createSearchService } from "./search-service.js";
+export {
+  applyRelevanceDecision,
+  DEFAULT_RELEVANCE_POLICY,
+  strictLexicalDecision
+} from "./relevance.js";
+export type { RelevancePolicy } from "./relevance.js";
 export type {
   SearchService,
   SearchServiceOptions,
@@ -30,11 +39,15 @@ export type {
   ConnectorState,
   ConnectorStatus,
   EventConnector,
+  EventRelevanceEvaluator,
   EventSearchQuery,
   EventSource,
   InterestProfile,
   NormalizedEvent,
   RawSourceEvent,
+  RelevanceDecision,
+  RelevanceDecisionKind,
+  RelevanceStatus,
   ResolvedSearchQuery,
   SearchStreamMessage
 } from "./types.js";

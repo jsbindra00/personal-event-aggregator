@@ -61,9 +61,44 @@ export interface RawSourceEvent {
 export interface NormalizedEvent
   extends Required<Omit<RawSourceEvent, "descriptionHtml">> {
   id: string;
+  relevanceDecision: RelevanceDecisionKind;
   relevanceScore: number;
+  relevanceConfidence: number;
+  relevanceReason: string;
   matchedInterests: string[];
   firstSeenAt: string;
+}
+
+export type RelevanceDecisionKind = "show" | "maybe" | "hide";
+
+export interface RelevanceDecision {
+  eventId: string;
+  decision: RelevanceDecisionKind;
+  score: number;
+  confidence: number;
+  matchedInterests: string[];
+  reason: string;
+}
+
+export interface RelevanceStatus {
+  state: "ready" | "evaluating" | "fallback" | "unavailable" | "complete";
+  evaluator: string;
+  model: string | null;
+  evaluatedCount: number;
+  showCount: number;
+  maybeCount: number;
+  hideCount: number;
+  safeMessage: string | null;
+}
+
+export interface EventRelevanceEvaluator {
+  readonly fingerprint: string;
+  evaluate(
+    events: readonly NormalizedEvent[],
+    profile: InterestProfile,
+    signal: AbortSignal
+  ): Promise<RelevanceDecision[]>;
+  status(signal?: AbortSignal): Promise<RelevanceStatus>;
 }
 
 export type ConnectorMessage =

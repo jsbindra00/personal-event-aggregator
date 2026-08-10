@@ -113,7 +113,10 @@ export function normalizeEvent(
     imageUrl: optionalHttpUrl(raw.imageUrl),
     priceText: cleanText(raw.priceText),
     tags,
+    relevanceDecision: "maybe",
     relevanceScore: 0,
+    relevanceConfidence: 0,
+    relevanceReason: "Awaiting relevance evaluation",
     matchedInterests: [],
     firstSeenAt: (options.now ?? (() => new Date()))().toISOString()
   };
