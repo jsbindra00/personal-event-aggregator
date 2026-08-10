@@ -48,6 +48,7 @@ export function EventResults({ events, searching }: EventResultsProps) {
               : [event.venueName, event.addressText].filter(Boolean).join(" · ") ||
                 "Location on event page"}
           </p>
+          <p className="relevance-reason">{event.relevanceReason}</p>
           {event.matchedInterests.length > 0 && (
             <div className="interest-matches">
               {event.matchedInterests.map((interest) => (

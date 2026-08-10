@@ -26,7 +26,10 @@ const event: NormalizedEvent = {
   imageUrl: null,
   priceText: null,
   tags: [],
+  relevanceDecision: "show",
   relevanceScore: 10,
+  relevanceConfidence: 0.82,
+  relevanceReason: "Strong match for AI builders",
   matchedInterests: [],
   firstSeenAt: "2026-08-10T00:00:00.000Z"
 };
@@ -38,5 +41,6 @@ describe("EventResults", () => {
     expect(
       screen.getByRole<HTMLAnchorElement>("link", { name: /open event/i }).href
     ).toBe("https://lu.ma/example");
+    expect(screen.getByText("Strong match for AI builders")).toBeTruthy();
   });
 });

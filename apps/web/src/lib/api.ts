@@ -32,6 +32,9 @@ const streamEventTypes: SearchStreamMessage["type"][] = [
   "source.failed",
   "event.added",
   "event.updated",
+  "event.maybe",
+  "relevance.progress",
+  "relevance.fallback",
   "source.completed",
   "search.completed"
 ];
@@ -103,4 +106,3 @@ export function createEventApi(baseUrl = ""): EventApi {
     }
   };
 }
-

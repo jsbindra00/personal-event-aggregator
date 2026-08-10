@@ -25,7 +25,10 @@ const baseEvent = {
   imageUrl: null,
   priceText: null,
   tags: [],
+  relevanceDecision: "show" as const,
   relevanceScore: 10,
+  relevanceConfidence: 0.9,
+  relevanceReason: "Matches the saved AI interest",
   matchedInterests: ["AI"],
   firstSeenAt: "2026-08-10T00:00:00.000Z"
 };
@@ -81,5 +84,65 @@ describe("useEventSearch", () => {
 
     expect(api.cancelledSearches).toEqual(["search-1"]);
     expect(api.searches).toHaveLength(2);
+  });
+
+  it("tracks relevance progress and keeps maybe events out of the main list", async () => {
+    const api = createTestEventApi();
+    const { result } = renderHook(() => useEventSearch(api));
+    await act(() =>
+      result.current.start({
+        locationText: "London",
+        startDate: "2026-08-10",
+        endDate: "2026-08-12",
+        timeZone: "Europe/London"
+      })
+    );
+
+    act(() => {
+      api.emit({
+        sequence: 2,
+        searchId: "search-1",
+        type: "relevance.progress",
+        relevance: {
+          state: "evaluating",
+          evaluator: "ollama",
+          model: "gemma3:4b",
+          evaluatedCount: 10,
+          showCount: 3,
+          maybeCount: 2,
+          hideCount: 5,
+          safeMessage: null
+        }
+      });
+      api.emit({
+        sequence: 3,
+        searchId: "search-1",
+        type: "event.added",
+        source: "luma",
+        event: baseEvent
+      });
+      api.emit({
+        sequence: 4,
+        searchId: "search-1",
+        type: "event.maybe",
+        source: "meetup",
+        event: {
+          ...baseEvent,
+          id: "meetup:maybe",
+          source: "meetup",
+          relevanceDecision: "maybe",
+          relevanceScore: 52,
+          relevanceReason: "Possibly related"
+        }
+      });
+    });
+
+    expect(result.current.events).toEqual([baseEvent]);
+    expect(result.current.maybeEvents).toHaveLength(1);
+    expect(result.current.relevance).toMatchObject({
+      evaluatedCount: 10,
+      showCount: 3,
+      maybeCount: 2
+    });
   });
 });

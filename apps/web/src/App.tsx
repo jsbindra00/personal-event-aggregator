@@ -4,6 +4,7 @@ import type { ConnectorStatus, EventSource, InterestProfile } from "@event-agg/c
 
 import { InterestEditor } from "./features/interests/InterestEditor.js";
 import { EventResults } from "./features/search/EventResults.js";
+import { RelevanceStatus } from "./features/search/RelevanceStatus.js";
 import { SearchForm } from "./features/search/SearchForm.js";
 import { SourceStatus } from "./features/search/SourceStatus.js";
 import { useEventSearch } from "./features/search/useEventSearch.js";
@@ -81,7 +82,14 @@ export function App({ api }: AppProps) {
           <span className={`phase-indicator phase-${search.phase}`}>{search.phase}</span>
         </div>
         {search.error && <p className="error-banner">{search.error}</p>}
+        <RelevanceStatus status={search.relevance} />
         <EventResults events={search.events} searching={search.phase === "searching"} />
+        {search.maybeEvents.length > 0 && (
+          <details className="maybe-results">
+            <summary>Maybe ({search.maybeEvents.length})</summary>
+            <EventResults events={search.maybeEvents} searching={false} />
+          </details>
+        )}
       </section>
     </main>
   );

@@ -66,11 +66,20 @@ h2 { margin: 0; font-size: clamp(30px, 4vw, 48px); letter-spacing: -.04em; font-
 .event-card h3 { margin: 46px 0 16px; font-size: 28px; line-height: 1.15; letter-spacing: -.03em; }
 .event-time { color: #d8ddd5; }
 .event-location { min-height: 42px; color: var(--muted); line-height: 1.5; }
+.relevance-reason { color: #b8c0b5; font-size: 13px; line-height: 1.5; }
 .interest-matches { display: flex; gap: 7px; flex-wrap: wrap; margin: 20px 0; }
 .interest-matches span { padding: 5px 8px; border: 1px solid #364035; color: #bfc7bc; font-size: 11px; }
 .event-card a { display: inline-flex; gap: 8px; margin-top: 12px; color: var(--acid); text-decoration: none; font-weight: 600; }
 .empty-state { display: grid; place-items: center; min-height: 260px; border: 1px dashed var(--line); color: var(--muted); }
 .error-banner { padding: 12px 14px; border: 1px solid #743a32; color: #ffb0a5; background: #241411; }
+.relevance-status { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 16px; padding: 13px 15px; border: 1px solid var(--line); color: #d8ddd5; background: #101511; font-family: "DM Mono", monospace; font-size: 12px; }
+.relevance-status strong, .relevance-status span { display: block; }
+.relevance-status span { margin-top: 4px; color: var(--muted); }
+.relevance-engine { color: var(--acid); white-space: nowrap; }
+.relevance-fallback { display: grid; grid-template-columns: 1fr auto; border-color: #73562b; background: #241d10; }
+.relevance-fallback p { grid-column: 1 / -1; margin: 2px 0 0; color: #f1c986; font-family: "Manrope", sans-serif; }
+.maybe-results { margin-top: 26px; border-top: 1px solid var(--line); }
+.maybe-results > summary { padding: 18px 0; color: var(--muted); cursor: pointer; font-family: "DM Mono", monospace; text-transform: uppercase; }
 
 @media (max-width: 900px) {
   main { width: min(100% - 24px, 720px); padding-top: 36px; }

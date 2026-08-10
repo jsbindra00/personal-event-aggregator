@@ -1,11 +1,47 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+
+import type { NormalizedEvent } from "@event-agg/core";
 
 import { App } from "./App.js";
 import { createTestEventApi } from "../test/test-api.js";
+
+afterEach(cleanup);
+
+function streamedEvent(
+  id: string,
+  relevanceDecision: NormalizedEvent["relevanceDecision"] = "show"
+): NormalizedEvent {
+  return {
+    id,
+    source: "luma",
+    sourceEventId: id,
+    canonicalUrl: `https://lu.ma/${id}`,
+    title: id === "evt-1" ? "AI Builders" : `Possible event ${id}`,
+    startsAt: "2026-08-12T18:00:00.000Z",
+    endsAt: null,
+    timeZone: "Europe/London",
+    descriptionText: "A builder meetup",
+    organizerName: "AI London",
+    venueName: "The Ministry",
+    addressText: "London",
+    latitude: null,
+    longitude: null,
+    isOnline: false,
+    imageUrl: null,
+    priceText: "Free",
+    tags: ["AI"],
+    relevanceDecision,
+    relevanceScore: relevanceDecision === "show" ? 82 : 55,
+    relevanceConfidence: 0.94,
+    relevanceReason: "Matches AI and builder interests",
+    matchedInterests: ["AI"],
+    firstSeenAt: "2026-08-10T00:00:00.000Z"
+  };
+}
 
 describe("App", () => {
   it("starts a search and renders a streamed canonical event link", async () => {
@@ -36,33 +72,47 @@ describe("App", () => {
       type: "event.added",
       source: "luma",
       event: {
-        id: "luma:evt-1",
-        source: "luma",
-        sourceEventId: "evt-1",
-        canonicalUrl: "https://lu.ma/example",
-        title: "AI Builders",
-        startsAt: "2026-08-12T18:00:00.000Z",
-        endsAt: null,
-        timeZone: "Europe/London",
-        descriptionText: "A builder meetup",
-        organizerName: "AI London",
-        venueName: "The Ministry",
-        addressText: "London",
-        latitude: null,
-        longitude: null,
-        isOnline: false,
-        imageUrl: null,
-        priceText: "Free",
-        tags: ["AI"],
-        relevanceScore: 12,
-        matchedInterests: ["AI"],
-        firstSeenAt: "2026-08-10T00:00:00.000Z"
+        ...streamedEvent("evt-1"),
+        canonicalUrl: "https://lu.ma/example"
       }
     });
 
     const link = await screen.findByRole("link", { name: /open event/i });
     expect(link.getAttribute("href")).toBe("https://lu.ma/example");
     expect(screen.getByText("AI Builders")).toBeTruthy();
+  });
+
+  it("keeps uncertain matches in a collapsed Maybe section", async () => {
+    const api = createTestEventApi();
+    const user = userEvent.setup();
+    render(<App api={api} />);
+
+    await user.type(screen.getByLabelText(/location/i), "London");
+    fireEvent.change(screen.getByLabelText(/start date/i), {
+      target: { value: "2026-08-10" }
+    });
+    fireEvent.change(screen.getByLabelText(/end date/i), {
+      target: { value: "2026-08-12" }
+    });
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+
+    api.emit({
+      sequence: 2,
+      searchId: "search-1",
+      type: "event.maybe",
+      source: "luma",
+      event: streamedEvent("maybe-1", "maybe")
+    });
+    api.emit({
+      sequence: 3,
+      searchId: "search-1",
+      type: "event.maybe",
+      source: "luma",
+      event: streamedEvent("maybe-2", "maybe")
+    });
+
+    const summary = await screen.findByText("Maybe (2)");
+    expect((summary.parentElement as HTMLDetailsElement).open).toBe(false);
   });
 
   it("offers a source-scoped sign-in action from safe connector status", async () => {

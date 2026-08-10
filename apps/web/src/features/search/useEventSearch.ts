@@ -5,6 +5,7 @@ import type {
   EventSearchQuery,
   EventSource,
   NormalizedEvent,
+  RelevanceStatus,
   SearchStreamMessage
 } from "@event-agg/core";
 
@@ -16,11 +17,15 @@ export function useEventSearch(api: EventApi) {
   const [eventMap, setEventMap] = useState<Map<string, NormalizedEvent>>(
     () => new Map()
   );
+  const [maybeEventMap, setMaybeEventMap] = useState<
+    Map<string, NormalizedEvent>
+  >(() => new Map());
   const [sourceStatuses, setSourceStatuses] = useState<
     Partial<Record<EventSource, ConnectorStatus>>
   >({});
   const [phase, setPhase] = useState<SearchPhase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [relevance, setRelevance] = useState<RelevanceStatus | null>(null);
   const searchIdRef = useRef<string | null>(null);
   const closeStreamRef = useRef<(() => void) | null>(null);
 
@@ -41,13 +46,34 @@ export function useEventSearch(api: EventApi) {
 
   const onMessage = useCallback(
     (message: SearchStreamMessage) => {
-      if ((message.type === "event.added" || message.type === "event.updated") && message.event) {
+      if (
+        (message.type === "event.added" || message.type === "event.updated") &&
+        message.event?.relevanceDecision === "show"
+      ) {
         setEventMap((current) => {
           const next = new Map(current);
           next.set(message.event!.id, message.event!);
           return next;
         });
+        setMaybeEventMap((current) => {
+          const next = new Map(current);
+          next.delete(message.event!.id);
+          return next;
+        });
       }
+      if (message.type === "event.maybe" && message.event) {
+        setMaybeEventMap((current) => {
+          const next = new Map(current);
+          next.set(message.event!.id, message.event!);
+          return next;
+        });
+        setEventMap((current) => {
+          const next = new Map(current);
+          next.delete(message.event!.id);
+          return next;
+        });
+      }
+      if (message.relevance) setRelevance(message.relevance);
       if (message.source && message.status) {
         setSourceStatuses((current) => ({
           ...current,
@@ -70,8 +96,10 @@ export function useEventSearch(api: EventApi) {
       closeStream();
       if (previousSearchId) await api.cancelSearch(previousSearchId);
       setEventMap(new Map());
+      setMaybeEventMap(new Map());
       setSourceStatuses({});
       setError(null);
+      setRelevance(null);
       setPhase("searching");
       try {
         const { searchId, streamUrl } = await api.startSearch(query);
@@ -99,15 +127,28 @@ export function useEventSearch(api: EventApi) {
   }, [api, closeStream]);
 
   const events = useMemo(
-    () =>
-      [...eventMap.values()].sort(
-        (left, right) =>
-          right.relevanceScore - left.relevanceScore ||
-          Date.parse(left.startsAt) - Date.parse(right.startsAt) ||
-          left.title.localeCompare(right.title)
-      ),
+    () => sortEvents(eventMap),
     [eventMap]
   );
+  const maybeEvents = useMemo(() => sortEvents(maybeEventMap), [maybeEventMap]);
 
-  return { events, sourceStatuses, phase, error, start, stop };
+  return {
+    events,
+    maybeEvents,
+    relevance,
+    sourceStatuses,
+    phase,
+    error,
+    start,
+    stop
+  };
+}
+
+function sortEvents(events: Map<string, NormalizedEvent>): NormalizedEvent[] {
+  return [...events.values()].sort(
+    (left, right) =>
+      right.relevanceScore - left.relevanceScore ||
+      Date.parse(left.startsAt) - Date.parse(right.startsAt) ||
+      left.title.localeCompare(right.title)
+  );
 }
