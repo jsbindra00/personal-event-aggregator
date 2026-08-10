@@ -1,11 +1,13 @@
 import Fastify, { type FastifyReply } from "fastify";
-import { z } from "zod";
 
-import type {
-  ConnectorStatus,
-  EventSource,
-  InterestProfile,
-  SearchService
+import {
+  eventSearchQuerySchema,
+  eventSourceSchema,
+  interestProfileSchema,
+  type ConnectorStatus,
+  type EventSource,
+  type InterestProfile,
+  type SearchService
 } from "@event-agg/core";
 
 import { pipeSse } from "./sse.js";
@@ -26,19 +28,6 @@ export interface AppDependencies {
   connectors: ConnectorManager;
 }
 
-const sourceSchema = z.enum(["meetup", "luma", "guild", "eventbrite"]);
-const searchSchema = z.object({
-  locationText: z.string().trim().min(1),
-  startDate: z.string(),
-  endDate: z.string(),
-  timeZone: z.string().trim().min(1)
-});
-const profileSchema = z.object({
-  positive: z.array(z.string().trim().min(1)).max(100),
-  excluded: z.array(z.string().trim().min(1)).max(100),
-  note: z.string().trim().max(2_000)
-});
-
 function validationError(reply: FastifyReply, error: unknown) {
   const message = error instanceof Error ? error.message : "Invalid request";
   return reply.code(400).send({ error: "validation_error", message });
@@ -50,7 +39,7 @@ export function buildApp(dependencies: AppDependencies) {
   app.get("/api/interests", async () => dependencies.interests.get());
 
   app.put("/api/interests", async (request, reply) => {
-    const parsed = profileSchema.safeParse(request.body);
+    const parsed = interestProfileSchema.safeParse(request.body);
     if (!parsed.success) {
       return validationError(reply, parsed.error);
     }
@@ -68,7 +57,7 @@ export function buildApp(dependencies: AppDependencies) {
   app.post<{ Params: { source: string } }>(
     "/api/connectors/:source/connect",
     async (request, reply) => {
-      const parsed = sourceSchema.safeParse(request.params.source);
+      const parsed = eventSourceSchema.safeParse(request.params.source);
       if (!parsed.success) {
         return validationError(reply, parsed.error);
       }
@@ -78,7 +67,7 @@ export function buildApp(dependencies: AppDependencies) {
   );
 
   app.post("/api/searches", async (request, reply) => {
-    const parsed = searchSchema.safeParse(request.body);
+    const parsed = eventSearchQuerySchema.safeParse(request.body);
     if (!parsed.success) {
       return validationError(reply, parsed.error);
     }
@@ -150,4 +139,3 @@ export function buildApp(dependencies: AppDependencies) {
 
   return app;
 }
-

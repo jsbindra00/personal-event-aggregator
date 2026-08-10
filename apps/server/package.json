@@ -3,6 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./dependencies": {
+      "types": "./src/dependencies.ts",
+      "default": "./src/dependencies.ts"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/bootstrap.ts",
