@@ -1,0 +1,69 @@
+{
+  "entries": [
+    {
+      "api_id": "entry_fixture_1",
+      "event": {
+        "api_id": "evt_fixture_1",
+        "calendar_api_id": "cal_fixture_1",
+        "cover_url": "https://images.lumacdn.com/fixture-cover-1",
+        "end_at": "2026-08-12T20:00:00.000Z",
+        "location_type": "offline",
+        "name": "AI Builders London",
+        "start_at": "2026-08-12T18:00:00.000Z",
+        "timezone": "Europe/London",
+        "url": "evt-fixture-1",
+        "geo_address_info": {
+          "city": "London",
+          "city_state": "London",
+          "country": "United Kingdom",
+          "country_code": "GB",
+          "full_address": "Fixture Hall, London, United Kingdom",
+          "short_address": "Fixture Hall, London"
+        },
+        "coordinate": {
+          "latitude": 51.5074,
+          "longitude": -0.1278
+        }
+      },
+      "calendar": {
+        "name": "London Builders"
+      },
+      "ticket_info": {
+        "price": null,
+        "is_free": true,
+        "max_price": null
+      }
+    },
+    {
+      "api_id": "entry_fixture_2",
+      "event": {
+        "api_id": "evt_fixture_2",
+        "calendar_api_id": "cal_fixture_2",
+        "cover_url": "https://images.lumacdn.com/fixture-cover-2",
+        "end_at": "2026-08-13T19:30:00.000Z",
+        "location_type": "online",
+        "name": "Practical Agent Systems",
+        "start_at": "2026-08-13T18:30:00.000Z",
+        "timezone": "Europe/London",
+        "url": "evt-fixture-2",
+        "geo_address_info": null,
+        "coordinate": null
+      },
+      "calendar": {
+        "name": "Agent Engineering"
+      },
+      "ticket_info": {
+        "price": {
+          "cents": 500,
+          "currency": "gbp",
+          "min_cents": 500,
+          "is_flexible": false
+        },
+        "is_free": false,
+        "max_price": null
+      }
+    }
+  ],
+  "has_more": true,
+  "next_cursor": "cursor_fixture_page_2"
+}
