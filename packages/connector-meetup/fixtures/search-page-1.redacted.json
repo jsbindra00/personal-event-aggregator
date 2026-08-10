@@ -1,0 +1,70 @@
+{
+  "data": {
+    "result": {
+      "pageInfo": {
+        "hasNextPage": true,
+        "endCursor": "cursor_fixture_page_2"
+      },
+      "edges": [
+        {
+          "node": {
+            "id": "evt_fixture_1",
+            "title": "London AI Builders",
+            "dateTime": "2026-08-12T19:00:00+01:00",
+            "description": "<p>A practical evening for people building AI products.</p>",
+            "eventType": "PHYSICAL",
+            "eventUrl": "https://www.meetup.com/london-builders/events/evt_fixture_1/",
+            "featuredEventPhoto": {
+              "highResUrl": "https://secure.meetupstatic.com/photos/event/fixture-1.jpeg"
+            },
+            "displayPhoto": null,
+            "feeSettings": null,
+            "group": {
+              "name": "London Builders",
+              "timezone": "Europe/London",
+              "urlname": "london-builders"
+            },
+            "venue": {
+              "name": "Fixture Hall",
+              "address": "1 Example Street",
+              "city": "London",
+              "state": "Greater London",
+              "country": "gb"
+            }
+          }
+        },
+        {
+          "node": {
+            "id": "evt_fixture_2",
+            "title": "Agent Engineering Clinic",
+            "dateTime": "2026-08-13T18:30:00+01:00",
+            "description": "<p>An online clinic for production agent systems.</p>",
+            "eventType": "ONLINE",
+            "eventUrl": "https://www.meetup.com/agent-engineering/events/evt_fixture_2/",
+            "featuredEventPhoto": null,
+            "displayPhoto": {
+              "highResUrl": "https://secure.meetupstatic.com/photos/event/fixture-2.jpeg"
+            },
+            "feeSettings": {
+              "accepts": "CASH",
+              "currency": "GBP",
+              "amount": 27
+            },
+            "group": {
+              "name": "Agent Engineering",
+              "timezone": "Europe/London",
+              "urlname": "agent-engineering"
+            },
+            "venue": {
+              "name": "Online event",
+              "address": "",
+              "city": "London",
+              "state": "Greater London",
+              "country": "gb"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
