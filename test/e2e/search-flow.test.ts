@@ -6,8 +6,11 @@ import type {
   ConnectorMessage,
   ConnectorStatus,
   EventConnector,
+  EventRelevanceEvaluator,
   EventSource,
+  NormalizedEvent,
   RawSourceEvent,
+  RelevanceDecision,
   ResolvedSearchQuery
 } from "../../packages/core/src/index.js";
 
@@ -146,6 +149,114 @@ function connectors(): EventConnector[] {
   ];
 }
 
+function broadEvents(): RawSourceEvent[] {
+  const categories = [
+    ...Array.from({ length: 4 }, (_, index) => `show-${index + 1}`),
+    ...Array.from({ length: 3 }, (_, index) => `maybe-${index + 1}`),
+    ...Array.from({ length: 5 }, (_, index) => `hide-${index + 1}`)
+  ];
+  return categories.map((category, index) => ({
+    source: "luma",
+    sourceEventId: category,
+    canonicalUrl: `https://lu.ma/${category}`,
+    title: `${category} London gathering`,
+    startsAt: `2026-08-${String(10 + index).padStart(2, "0")}T18:00:00.000Z`,
+    endsAt: null,
+    timeZone: "Europe/London",
+    descriptionText: "A broad discovery candidate",
+    organizerName: "London Events",
+    venueName: "London",
+    addressText: "London",
+    latitude: null,
+    longitude: null,
+    isOnline: false,
+    imageUrl: null,
+    priceText: null,
+    tags: []
+  }));
+}
+
+function broadConnectors(): EventConnector[] {
+  const events = broadEvents();
+  return [
+    new AsyncFakeConnector(
+      "luma",
+      [
+        ...events.map(
+          (event): ConnectorMessage => ({ type: "event", source: "luma", event })
+        ),
+        { type: "complete", source: "luma", count: events.length }
+      ],
+      1
+    ),
+    ...(["meetup", "eventbrite", "guild"] as const).map(
+      (source) =>
+        new AsyncFakeConnector(
+          source,
+          [{ type: "complete", source, count: 0 }],
+          1
+        )
+    )
+  ];
+}
+
+class CountingRelevanceEvaluator implements EventRelevanceEvaluator {
+  readonly fingerprint = "fake-ollama:gemma3:4b:event-relevance-v1";
+  public evaluated = 0;
+
+  async evaluate(events: readonly NormalizedEvent[]): Promise<RelevanceDecision[]> {
+    this.evaluated += events.length;
+    return events.map((event) => {
+      const kind = event.sourceEventId?.split("-")[0];
+      const decision = kind === "show" ? "show" : kind === "maybe" ? "maybe" : "hide";
+      return {
+        eventId: event.id,
+        decision,
+        score: decision === "show" ? 88 : decision === "maybe" ? 55 : 12,
+        confidence: 0.91,
+        matchedInterests: decision === "show" ? ["AI"] : [],
+        reason: `${decision} decision from local Gemma fixture`
+      };
+    });
+  }
+
+  async status() {
+    return {
+      state: "ready" as const,
+      evaluator: "ollama",
+      model: "gemma3:4b",
+      evaluatedCount: 0,
+      showCount: 0,
+      maybeCount: 0,
+      hideCount: 0,
+      safeMessage: null
+    };
+  }
+}
+
+const showAllEvaluator: EventRelevanceEvaluator = {
+  fingerprint: "e2e-show-all:v1",
+  evaluate: async (events) =>
+    events.map((event) => ({
+      eventId: event.id,
+      decision: "show",
+      score: 90,
+      confidence: 1,
+      matchedInterests: [],
+      reason: "Accepted by end-to-end fixture"
+    })),
+  status: async () => ({
+    state: "ready",
+    evaluator: "e2e-show-all",
+    model: null,
+    evaluatedCount: 0,
+    showCount: 0,
+    maybeCount: 0,
+    hideCount: 0,
+    safeMessage: null
+  })
+};
+
 function parseSse(payload: string) {
   return payload
     .split("\n\n")
@@ -161,10 +272,118 @@ afterEach(async () => {
 });
 
 describe("complete personal event search", () => {
+  it("casts a broad net, filters with a local model, and reuses cached decisions", async () => {
+    const evaluator = new CountingRelevanceEvaluator();
+    const browserOpens: EventSource[] = [];
+    const dependencies = createProductionDependencies({
+      databasePath: ":memory:",
+      connectors: broadConnectors(),
+      relevanceEvaluator: evaluator,
+      browserHost: {
+        pageFor: async (source) => {
+          browserOpens.push(source);
+          throw new Error("browser should not open in the broad direct flow");
+        },
+        closeSource: async () => undefined,
+        close: async () => undefined
+      }
+    });
+    const app = buildApp(dependencies);
+    cleanup.push(async () => {
+      await app.close();
+      await dependencies.close();
+    });
+    await app.inject({
+      method: "PUT",
+      url: "/api/interests",
+      payload: {
+        positive: ["AI", "product design", "startups", "developer tools"],
+        excluded: ["crypto trading"],
+        note: "Technical, practical, founder and builder events"
+      }
+    });
+
+    const runSearch = async () => {
+      const started = await app.inject({
+        method: "POST",
+        url: "/api/searches",
+        payload: {
+          ...query,
+          endDate: "2026-08-31"
+        }
+      });
+      const searchId = started.json().searchId as string;
+      const stream = await app.inject({
+        method: "GET",
+        url: `/api/searches/${searchId}/stream`
+      });
+      return { searchId, messages: parseSse(stream.payload) };
+    };
+
+    const first = await runSearch();
+    expect(first.messages.filter(({ type }) => type === "event.added")).toHaveLength(4);
+    expect(first.messages.filter(({ type }) => type === "event.maybe")).toHaveLength(3);
+    const visible = (
+      await app.inject({ method: "GET", url: `/api/searches/${first.searchId}` })
+    ).json();
+    expect(visible.events).toHaveLength(4);
+    expect(visible.maybeCount).toBe(3);
+    expect(visible).not.toHaveProperty("maybeEvents");
+    expect(visible.relevance).toMatchObject({
+      state: "complete",
+      evaluatedCount: 12,
+      showCount: 4,
+      maybeCount: 3,
+      hideCount: 5
+    });
+
+    const complete = (
+      await app.inject({
+        method: "GET",
+        url: `/api/searches/${first.searchId}?includeMaybe=true`
+      })
+    ).json();
+    expect(complete.maybeEvents).toHaveLength(3);
+    expect(complete.events.every(({ relevanceReason }: { relevanceReason: string }) =>
+      relevanceReason.includes("local Gemma")
+    )).toBe(true);
+    expect(evaluator.evaluated).toBe(12);
+
+    await runSearch();
+    expect(evaluator.evaluated).toBe(12);
+    expect(browserOpens).toEqual([]);
+
+    const mcpServer = buildEventMcpServer(dependencies);
+    const client = new Client({ name: "model-e2e-client", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await mcpServer.connect(serverTransport);
+    await client.connect(clientTransport);
+    cleanup.push(async () => {
+      await client.close();
+      await mcpServer.close();
+    });
+    const mcpResult = await client.callTool({
+      name: "search_events",
+      arguments: { ...query, endDate: "2026-08-31", includeMaybe: true }
+    });
+    expect(mcpResult.structuredContent).toMatchObject({
+      events: expect.arrayContaining([
+        expect.objectContaining({ relevanceDecision: "show" })
+      ]),
+      maybeCount: 3,
+      maybeEvents: expect.arrayContaining([
+        expect.objectContaining({ relevanceDecision: "maybe" })
+      ]),
+      relevance: { showCount: 4, maybeCount: 3, hideCount: 5 }
+    });
+    expect(evaluator.evaluated).toBe(12);
+  });
+
   it("streams, deduplicates, ranks, persists, isolates failure, and matches MCP", async () => {
     const dependencies = createProductionDependencies({
       databasePath: ":memory:",
       connectors: connectors(),
+      relevanceEvaluator: showAllEvaluator,
       browserHost: {
         pageFor: async () => {
           throw new Error("browser should not open in the mocked flow");
@@ -208,7 +427,7 @@ describe("complete personal event search", () => {
       messages
         .filter(({ type }) => type === "event.added" || type === "event.updated")
         .map(({ type }) => type)
-    ).toEqual(["event.added", "event.updated", "event.added"]);
+    ).toEqual(["event.added", "event.added"]);
 
     const snapshotResponse = await app.inject({
       method: "GET",
@@ -218,10 +437,10 @@ describe("complete personal event search", () => {
     expect(snapshot.status).toBe("complete");
     expect(snapshot.events).toHaveLength(2);
     expect(snapshot.events.map(({ title }: { title: string }) => title)).toEqual([
-      "Climate AI Forum",
-      "AI Builders London"
+      "AI Builders London",
+      "Climate AI Forum"
     ]);
-    expect(snapshot.events[1]).toMatchObject({
+    expect(snapshot.events[0]).toMatchObject({
       descriptionText: "A technical workshop for people building useful AI products.",
       organizerName: "London AI"
     });
@@ -269,6 +488,7 @@ describe("complete personal event search", () => {
     const dependencies = createProductionDependencies({
       databasePath: ":memory:",
       fetch: createDirectFixtureFetch(),
+      relevanceEvaluator: showAllEvaluator,
       browserHost: {
         pageFor: async (source) => {
           browserOpens.push(source);
@@ -316,7 +536,7 @@ describe("complete personal event search", () => {
       messages.filter(
         ({ type }) => type === "event.added" || type === "event.updated"
       )
-    ).toHaveLength(6);
+    ).toHaveLength(5);
     const snapshot = (
       await app.inject({ method: "GET", url: `/api/searches/${searchId}` })
     ).json();

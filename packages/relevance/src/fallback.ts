@@ -1,5 +1,7 @@
 import {
   isEventExcluded,
+  MATCH_WEIGHTS,
+  rankEvent,
   strictLexicalDecision,
   type EventRelevanceEvaluator,
   type InterestProfile,
@@ -51,7 +53,7 @@ class ResilientRelevanceEvaluator implements EventRelevanceEvaluator {
     private readonly primary: EventRelevanceEvaluator,
     private readonly fallback: EventRelevanceEvaluator
   ) {
-    this.fingerprint = `resilient:${primary.fingerprint}:${fallback.fingerprint}`;
+    this.fingerprint = `resilient:v4:${primary.fingerprint}:${fallback.fingerprint}`;
   }
 
   async evaluate(
@@ -115,7 +117,7 @@ class ResilientRelevanceEvaluator implements EventRelevanceEvaluator {
       if (decision === undefined) {
         throw new Error("Relevance evaluator returned an incomplete batch");
       }
-      return decision;
+      return corroborateModelShow(event, profile, decision);
     });
     this.currentStatus = summarize(
       this.usedFallback ? "fallback" : "complete",
@@ -157,6 +159,36 @@ class ResilientRelevanceEvaluator implements EventRelevanceEvaluator {
         "Local relevance model was unavailable; using strict fallback";
     }
   }
+}
+
+function corroborateModelShow(
+  event: NormalizedEvent,
+  profile: InterestProfile,
+  decision: RelevanceDecision
+): RelevanceDecision {
+  if (decision.decision !== "show") return decision;
+  const lexical = strictLexicalDecision(event, profile);
+  const lexicalScore = rankEvent(event, profile).relevanceScore;
+  const lexicalMatches = new Set(
+    lexical.matchedInterests.map((interest) => interest.trim().toLocaleLowerCase("en"))
+  );
+  const corroborated = decision.matchedInterests.filter((interest) =>
+    lexicalMatches.has(interest.trim().toLocaleLowerCase("en"))
+  );
+  if (
+    lexical.decision === "show" &&
+    lexicalScore >= MATCH_WEIGHTS.titleToken &&
+    corroborated.length > 0
+  ) {
+    return { ...decision, matchedInterests: corroborated };
+  }
+  return {
+    ...decision,
+    decision: "maybe",
+    score: Math.min(69, decision.score),
+    matchedInterests: [],
+    reason: "Possible semantic match without a direct saved-interest signal"
+  };
 }
 
 function split<T>(values: readonly T[]): T[][] {

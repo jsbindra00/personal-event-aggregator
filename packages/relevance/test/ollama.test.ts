@@ -27,15 +27,36 @@ describe("Ollama relevance evaluator", () => {
       expect(request.body).toMatchObject({
         model: "gemma3:4b",
         stream: false,
-        format: expect.objectContaining({ type: "object" }),
+        format: expect.objectContaining({
+          type: "object",
+          properties: {
+            decisions: expect.objectContaining({
+              minItems: 2,
+              maxItems: 2,
+              items: expect.objectContaining({
+                properties: expect.objectContaining({
+                  eventId: expect.objectContaining({
+                    enum: ["event_1", "event_2"]
+                  })
+                })
+              })
+            })
+          }
+        }),
         options: { temperature: 0 },
         messages: [{ role: "user", content: expect.any(String) }]
       });
+      const prompt = (request.body.messages as Array<{ content: string }>)[0]!
+        .content;
+      expect(prompt).toContain('"id":"event_1"');
+      expect(prompt).toContain('"id":"event_2"');
+      expect(prompt).not.toContain("luma:first");
+      expect(prompt).not.toContain("meetup:second");
       return {
         message: {
           role: "assistant",
           content: JSON.stringify({
-            decisions: [decision("meetup:second"), decision("luma:first")]
+            decisions: [decision("event_2"), decision("event_1")]
           })
         }
       };
@@ -85,15 +106,15 @@ describe("Ollama relevance evaluator", () => {
   it.each([
     {
       name: "missing ID",
-      decisions: [decision("luma:first")]
+      decisions: [decision("event_1")]
     },
     {
       name: "duplicate ID",
-      decisions: [decision("luma:first"), decision("luma:first")]
+      decisions: [decision("event_1"), decision("event_1")]
     },
     {
       name: "unknown ID",
-      decisions: [decision("luma:first"), decision("unknown")]
+      decisions: [decision("event_1"), decision("unknown")]
     }
   ])("rejects a schema-valid batch with a $name", async ({ decisions }) => {
     const evaluator = evaluatorReturning({ decisions });

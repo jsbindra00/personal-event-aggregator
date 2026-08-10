@@ -200,7 +200,8 @@ describe("production connector wiring", () => {
     const dependencies = createProductionDependencies({
       databasePath: ":memory:",
       browserHost,
-      fetch: createDirectFixtureFetch({ meetupDrift: true })
+      fetch: createDirectFixtureFetch({ meetupDrift: true }),
+      relevanceEvaluator: showAllEvaluator
     });
     dependenciesToClose.push(dependencies);
 

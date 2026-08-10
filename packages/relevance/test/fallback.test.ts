@@ -116,6 +116,70 @@ describe("resilient relevance evaluation", () => {
     });
   });
 
+  it("keeps an unsupported semantic model match out of the main feed", async () => {
+    const unrelated = event({
+      id: "event:music",
+      title: "Electronic House Music Night",
+      descriptionText: "Persian sounds, atmosphere, and storytelling",
+      tags: ["music"]
+    });
+    const primary = evaluator(async () => [
+      decision(unrelated.id, {
+        decision: "show",
+        score: 88,
+        confidence: 0.9,
+        matchedInterests: ["AI engineering", "climate tech"],
+        reason: "The model inferred a connection"
+      })
+    ]);
+    const resilient = createResilientRelevanceEvaluator(primary);
+
+    const [result] = await resilient.evaluate(
+      [unrelated],
+      profile,
+      new AbortController().signal
+    );
+
+    expect(result).toMatchObject({
+      decision: "maybe",
+      score: 69,
+      matchedInterests: [],
+      reason: "Possible semantic match without a direct saved-interest signal"
+    });
+  });
+
+  it("requires the claimed model interest to corroborate the lexical signal", async () => {
+    const incidental = event({
+      id: "event:trip",
+      title: "Cotswolds coach trip",
+      descriptionText: "Pay by bank transfer using the listed sort code"
+    });
+    const customProfile = {
+      positive: ["Code", "product design"],
+      excluded: [],
+      note: ""
+    };
+    const primary = evaluator(async () => [
+      decision(incidental.id, {
+        matchedInterests: ["Code", "product design"],
+        reason: "Potentially related to product design"
+      })
+    ]);
+    const resilient = createResilientRelevanceEvaluator(primary);
+
+    const [result] = await resilient.evaluate(
+      [incidental],
+      customProfile,
+      new AbortController().signal
+    );
+
+    expect(result).toMatchObject({
+      decision: "maybe",
+      score: 69,
+      matchedInterests: []
+    });
+  });
+
   it("propagates caller cancellation instead of invoking fallback", async () => {
     let fallbackCalled = false;
     const controller = new AbortController();

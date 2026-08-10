@@ -149,7 +149,7 @@ export function createProductionDependencies(
           environment.EVENT_AGG_OLLAMA_URL ?? "http://127.0.0.1:11434",
         model: environment.EVENT_AGG_RELEVANCE_MODEL ?? "gemma3:4b",
         timeoutMs: relevanceTimeout(environment.EVENT_AGG_RELEVANCE_TIMEOUT_MS),
-        promptVersion: "event-relevance-v1",
+        promptVersion: "event-relevance-v3",
         ...(options.relevanceFetch === undefined
           ? {}
           : { fetch: options.relevanceFetch })
@@ -177,7 +177,12 @@ export function createProductionDependencies(
     store,
     getInterests: () => repositories.interests.get(),
     relevanceEvaluator,
-    relevanceCache
+    relevanceCache,
+    relevanceBatchSize: positiveEnvironmentInteger(
+      environment.EVENT_AGG_RELEVANCE_BATCH_SIZE,
+      5,
+      "Relevance batch size"
+    )
   });
   const registry = new Map(
     connectors.map((connector) => [connector.source, connector] as const)
@@ -220,11 +225,19 @@ export function createProductionDependencies(
 }
 
 function relevanceTimeout(value: string | undefined): number {
-  const timeout = Number(value ?? 30_000);
-  if (!Number.isSafeInteger(timeout) || timeout < 1) {
-    throw new Error("Relevance timeout must be a positive integer");
+  return positiveEnvironmentInteger(value, 60_000, "Relevance timeout");
+}
+
+function positiveEnvironmentInteger(
+  value: string | undefined,
+  fallback: number,
+  label: string
+): number {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error(`${label} must be a positive integer`);
   }
-  return timeout;
+  return parsed;
 }
 
 function withInteractiveConnection(

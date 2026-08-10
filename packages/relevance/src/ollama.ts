@@ -59,7 +59,7 @@ class OllamaRelevanceEvaluator implements EventRelevanceEvaluator {
     this.endpoint = normalizedEndpoint(options.endpoint ?? "http://127.0.0.1:11434");
     this.model = options.model ?? "gemma3:4b";
     this.fetch = options.fetch ?? globalThis.fetch;
-    this.timeoutMs = positiveInteger(options.timeoutMs ?? 30_000, "timeoutMs");
+    this.timeoutMs = positiveInteger(options.timeoutMs ?? 60_000, "timeoutMs");
     const promptVersion = options.promptVersion ?? "prompt-v1";
     this.fingerprint = `ollama:${this.model}:${promptVersion}:70:0.55:40`;
     this.currentStatus = emptyStatus("ready", this.model, null);
@@ -80,6 +80,10 @@ class OllamaRelevanceEvaluator implements EventRelevanceEvaluator {
       evaluatedCount: 0
     };
     try {
+      const modelEvents = events.map((event, index) => ({
+        ...event,
+        id: `event_${index + 1}`
+      }));
       const payload = await this.requestJson(
         "/api/chat",
         {
@@ -88,10 +92,13 @@ class OllamaRelevanceEvaluator implements EventRelevanceEvaluator {
           body: JSON.stringify({
             model: this.model,
             messages: [
-              { role: "user", content: buildRelevancePrompt(events, profile) }
+              {
+                role: "user",
+                content: buildRelevancePrompt(modelEvents, profile)
+              }
             ],
             stream: false,
-            format: z.toJSONSchema(relevanceBatchSchema),
+            format: relevanceFormatSchema(modelEvents),
             options: { temperature: 0 }
           })
         },
@@ -107,7 +114,11 @@ class OllamaRelevanceEvaluator implements EventRelevanceEvaluator {
       }
       const batch = relevanceBatchSchema.safeParse(content);
       if (!batch.success) throw invalidResponse(batch.error);
-      const ordered = exactDecisionSet(events, batch.data.decisions);
+      const orderedAliases = exactDecisionSet(modelEvents, batch.data.decisions);
+      const ordered = orderedAliases.map((decision, index) => ({
+        ...decision,
+        eventId: events[index]!.id
+      }));
       this.currentStatus = summarize("complete", this.model, ordered, null);
       return ordered;
     } catch (error) {
@@ -191,6 +202,27 @@ class OllamaRelevanceEvaluator implements EventRelevanceEvaluator {
       throw invalidResponse(error);
     }
   }
+}
+
+function relevanceFormatSchema(events: readonly NormalizedEvent[]): unknown {
+  const schema = z.toJSONSchema(relevanceBatchSchema) as unknown as {
+    properties: {
+      decisions: {
+        minItems?: number;
+        maxItems?: number;
+        items: {
+          properties: {
+            eventId: { enum?: string[] };
+          };
+        };
+      };
+    };
+  };
+  const decisions = schema.properties.decisions;
+  decisions.minItems = events.length;
+  decisions.maxItems = events.length;
+  decisions.items.properties.eventId.enum = events.map(({ id }) => id);
+  return schema;
 }
 
 function exactDecisionSet(
