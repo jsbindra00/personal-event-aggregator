@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.data/
+*.log
+.env
+.env.*
+*.har
+*.unredacted.*
+.DS_Store
+
