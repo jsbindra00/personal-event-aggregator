@@ -44,6 +44,9 @@ importers:
       '@event-agg/browser':
         specifier: workspace:*
         version: link:../../packages/browser
+      '@event-agg/connector-common':
+        specifier: workspace:*
+        version: link:../../packages/connector-common
       '@event-agg/connector-eventbrite':
         specifier: workspace:*
         version: link:../../packages/connector-eventbrite

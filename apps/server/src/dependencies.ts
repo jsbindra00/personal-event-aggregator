@@ -1,7 +1,9 @@
 import { resolve } from "node:path";
 
 import { BrowserHost } from "@event-agg/browser";
+import { withConnectorFallback } from "@event-agg/connector-common";
 import {
+  createDirectEventbriteConnector,
   createEventbriteConnector,
   eventbriteSearchContract
 } from "@event-agg/connector-eventbrite";
@@ -10,10 +12,12 @@ import {
   GUILD_CLOSURE_URL
 } from "@event-agg/connector-guild";
 import {
+  createDirectLumaConnector,
   createLumaConnector,
   lumaSearchContract
 } from "@event-agg/connector-luma";
 import {
+  createDirectMeetupConnector,
   createMeetupConnector,
   meetupSearchContract
 } from "@event-agg/connector-meetup";
@@ -47,6 +51,7 @@ export interface ProductionDependencyOptions {
   databasePath?: string;
   browserHost?: ServerBrowserHost;
   connectors?: EventConnector[];
+  fetch?: typeof globalThis.fetch;
   diagnostic?: (value: unknown) => void;
 }
 
@@ -68,17 +73,24 @@ export function createProductionDependencies(
   const browserHost = options.browserHost ?? new BrowserHost();
   const diagnosticOptions =
     options.diagnostic === undefined ? {} : { diagnostic: options.diagnostic };
+  const directOptions = {
+    ...diagnosticOptions,
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch })
+  };
   const rawConnectors =
     options.connectors ??
     [
-      withSearchDelay(
-        createLumaConnector(browserHost, diagnosticOptions),
-        3_000
+      withConnectorFallback(
+        createDirectLumaConnector(directOptions),
+        createLumaConnector(browserHost, diagnosticOptions)
       ),
-      createMeetupConnector(browserHost, diagnosticOptions),
-      withSearchDelay(
-        createEventbriteConnector(browserHost, diagnosticOptions),
-        6_000
+      withConnectorFallback(
+        createDirectMeetupConnector(directOptions),
+        createMeetupConnector(browserHost, diagnosticOptions)
+      ),
+      withConnectorFallback(
+        createDirectEventbriteConnector(directOptions),
+        createEventbriteConnector(browserHost, diagnosticOptions)
       ),
       createGuildConnector()
     ];
@@ -172,41 +184,6 @@ function withInteractiveConnection(
     },
     search: (query, signal) => connector.search(query, signal)
   };
-}
-
-function withSearchDelay(
-  connector: EventConnector,
-  delayMs: number
-): EventConnector {
-  return {
-    source: connector.source,
-    getStatus: () => connector.getStatus(),
-    connect: () => connector.connect(),
-    search: async function* (query, signal) {
-      if (!(await abortableDelay(delayMs, signal))) return;
-      yield* connector.search(query, signal);
-    }
-  };
-}
-
-async function abortableDelay(
-  delayMs: number,
-  signal: AbortSignal
-): Promise<boolean> {
-  if (signal.aborted) return false;
-  return new Promise<boolean>((resolveDelay) => {
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", abort);
-      resolveDelay(true);
-    }, delayMs);
-    const abort = () => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", abort);
-      resolveDelay(false);
-    };
-    signal.addEventListener("abort", abort, { once: true });
-    if (signal.aborted) abort();
-  });
 }
 
 /** Prevents one source's persistent page from serving overlapping operations. */

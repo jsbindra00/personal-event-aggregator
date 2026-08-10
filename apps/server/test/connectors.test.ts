@@ -13,6 +13,7 @@ import {
   serializeConnectorOperations,
   type ProductionDependencies
 } from "../src/dependencies.js";
+import { createDirectFixtureFetch } from "../../../test/helpers/direct-fixture-fetch.js";
 
 class FakeBrowserHost {
   readonly opened: Array<{ source: EventSource; url: string }> = [];
@@ -78,6 +79,43 @@ describe("production connector wiring", () => {
     expect(new Set(dependencies.connectorSources)).toEqual(
       new Set(["luma", "meetup", "eventbrite", "guild"])
     );
+  });
+
+  it("searches all available sources directly without opening browser pages", async () => {
+    const browserHost = new FakeBrowserHost();
+    const dependencies = createProductionDependencies({
+      databasePath: ":memory:",
+      browserHost,
+      fetch: createDirectFixtureFetch()
+    });
+    dependenciesToClose.push(dependencies);
+
+    const { searchId } = await dependencies.searchService.start(searchQuery);
+    await drain(dependencies.searchService.subscribe(searchId));
+
+    expect(browserHost.opened).toEqual([]);
+    const snapshot = dependencies.searchService.snapshot(searchId);
+    expect(snapshot?.events).toHaveLength(5);
+    expect(
+      snapshot?.sources
+        .filter(({ source }) => source !== "guild")
+        .map(({ state }) => state)
+    ).toEqual(["complete", "complete", "complete"]);
+  });
+
+  it("opens only the source whose direct private contract drifted", async () => {
+    const browserHost = new FakeBrowserHost();
+    const dependencies = createProductionDependencies({
+      databasePath: ":memory:",
+      browserHost,
+      fetch: createDirectFixtureFetch({ meetupDrift: true })
+    });
+    dependenciesToClose.push(dependencies);
+
+    const { searchId } = await dependencies.searchService.start(searchQuery);
+    await drain(dependencies.searchService.subscribe(searchId));
+
+    expect(browserHost.opened.map(({ source }) => source)).toEqual(["meetup"]);
   });
 
   it("exposes one auth-required state without changing other sources", async () => {
@@ -175,3 +213,16 @@ describe("production connector wiring", () => {
     expect(starts).toEqual([1, 2]);
   });
 });
+
+const searchQuery = {
+  locationText: "London",
+  startDate: "2026-08-12",
+  endDate: "2026-08-13",
+  timeZone: "Europe/London"
+};
+
+async function drain(iterable: AsyncIterable<unknown>): Promise<void> {
+  for await (const _message of iterable) {
+    // Drain the search to completion.
+  }
+}

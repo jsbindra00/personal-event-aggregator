@@ -14,6 +14,7 @@ import type {
 import { buildEventMcpServer } from "../../apps/mcp/src/server.js";
 import { buildApp } from "../../apps/server/src/app.js";
 import { createProductionDependencies } from "../../apps/server/src/dependencies.js";
+import { createDirectFixtureFetch } from "../helpers/direct-fixture-fetch.js";
 
 const query = {
   locationText: "London",
@@ -261,5 +262,93 @@ describe("complete personal event search", () => {
     expect(mcp.sources).toContainEqual(
       expect.objectContaining({ source: "guild", state: "failed" })
     );
+  });
+
+  it("runs real direct connectors through SSE, storage, REST, and MCP without a browser", async () => {
+    const browserOpens: EventSource[] = [];
+    const dependencies = createProductionDependencies({
+      databasePath: ":memory:",
+      fetch: createDirectFixtureFetch(),
+      browserHost: {
+        pageFor: async (source) => {
+          browserOpens.push(source);
+          throw new Error("browser fallback should not open for valid fixtures");
+        },
+        closeSource: async () => undefined,
+        close: async () => undefined
+      }
+    });
+    const app = buildApp(dependencies);
+    cleanup.push(async () => {
+      await app.close();
+      await dependencies.close();
+    });
+
+    await app.inject({
+      method: "PUT",
+      url: "/api/interests",
+      payload: {
+        positive: ["AI", "agents"],
+        excluded: ["crypto"],
+        note: "Technical events"
+      }
+    });
+    const directQuery = {
+      locationText: "10 Downing Street, London",
+      startDate: "2026-08-12",
+      endDate: "2026-08-13",
+      timeZone: "Europe/London"
+    };
+    const started = await app.inject({
+      method: "POST",
+      url: "/api/searches",
+      payload: directQuery
+    });
+    const searchId = started.json().searchId as string;
+    const stream = await app.inject({
+      method: "GET",
+      url: `/api/searches/${searchId}/stream`
+    });
+    const messages = parseSse(stream.payload);
+
+    expect(browserOpens).toEqual([]);
+    expect(
+      messages.filter(
+        ({ type }) => type === "event.added" || type === "event.updated"
+      )
+    ).toHaveLength(6);
+    const snapshot = (
+      await app.inject({ method: "GET", url: `/api/searches/${searchId}` })
+    ).json();
+    expect(snapshot.status).toBe("complete");
+    expect(snapshot.events).toHaveLength(5);
+    expect(
+      snapshot.sources
+        .filter(({ source }: { source: string }) => source !== "guild")
+        .map(({ state }: { state: string }) => state)
+    ).toEqual(["complete", "complete", "complete"]);
+
+    const mcpServer = buildEventMcpServer(dependencies);
+    const client = new Client({ name: "direct-e2e-client", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await mcpServer.connect(serverTransport);
+    await client.connect(clientTransport);
+    cleanup.push(async () => {
+      await client.close();
+      await mcpServer.close();
+    });
+    const mcpResult = await client.callTool({
+      name: "search_events",
+      arguments: directQuery
+    });
+    const mcp = mcpResult.structuredContent as {
+      events: Array<{ title: string; url: string }>;
+    };
+    expect(mcp.events.map(({ url }) => url)).toEqual(
+      snapshot.events.map(
+        ({ canonicalUrl }: { canonicalUrl: string }) => canonicalUrl
+      )
+    );
+    expect(browserOpens).toEqual([]);
   });
 });

@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@event-agg/browser": "workspace:*",
+    "@event-agg/connector-common": "workspace:*",
     "@event-agg/connector-eventbrite": "workspace:*",
     "@event-agg/connector-guild": "workspace:*",
     "@event-agg/connector-luma": "workspace:*",
