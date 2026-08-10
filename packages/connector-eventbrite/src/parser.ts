@@ -2,6 +2,7 @@ import {
   canonicalizeEventUrl,
   type RawSourceEvent
 } from "@event-agg/core";
+import { parse, type DefaultTreeAdapterTypes } from "parse5";
 import { z } from "zod";
 
 const addressSchema = z
@@ -78,6 +79,38 @@ export function parseEventbriteSearchPayload(
   } catch (error) {
     if (error instanceof EventbritePayloadError) throw error;
     throw new EventbritePayloadError({ cause: error });
+  }
+}
+
+export function parseEventbriteSearchHtml(html: string): unknown {
+  const document = parse(html);
+  for (const node of walk(document)) {
+    if (node.tagName !== "script") continue;
+    const type = node.attrs.find((attribute) => attribute.name === "type")?.value;
+    if (type !== "application/ld+json") continue;
+    const text = node.childNodes
+      .filter(
+        (child): child is DefaultTreeAdapterTypes.TextNode =>
+          child.nodeName === "#text"
+      )
+      .map((child) => child.value)
+      .join("");
+    try {
+      const candidate = JSON.parse(text) as { "@type"?: unknown };
+      if (candidate["@type"] === "ItemList") return candidate;
+    } catch {
+      // Ignore unrelated malformed structured-data blocks.
+    }
+  }
+  throw new EventbritePayloadError();
+}
+
+function* walk(
+  node: DefaultTreeAdapterTypes.Node
+): Iterable<DefaultTreeAdapterTypes.Element> {
+  if ("tagName" in node) yield node;
+  if ("childNodes" in node) {
+    for (const child of node.childNodes) yield* walk(child);
   }
 }
 

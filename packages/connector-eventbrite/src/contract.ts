@@ -83,7 +83,7 @@ export async function readEventbriteItemList(page: Page): Promise<unknown> {
   return {};
 }
 
-function eventbriteSearchUrl(locationText: string): string | null {
+export function eventbriteSearchUrl(locationText: string): string | null {
   const normalized = locationText.toLowerCase();
   if (/\blondon\b/.test(normalized)) return LONDON_URL;
 
