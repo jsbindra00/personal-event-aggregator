@@ -365,14 +365,15 @@ class DefaultSearchService implements SearchService {
     let messageType: "event.added" | "event.updated" = "event.added";
     let replacesEventId: string | undefined;
     if (duplicate) {
-      const merged = rankEvent(mergeDuplicate(duplicate, event), this.getInterests());
+      const enriched = mergeDuplicate(duplicate, event);
+      const merged = rankEvent(
+        { ...enriched, id: duplicate.id },
+        this.getInterests()
+      );
       run.events.delete(duplicate.id);
       run.events.set(merged.id, merged);
       event = merged;
       messageType = "event.updated";
-      if (duplicate.id !== merged.id) {
-        replacesEventId = duplicate.id;
-      }
     } else {
       run.events.set(event.id, event);
     }

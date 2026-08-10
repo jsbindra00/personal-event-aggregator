@@ -221,9 +221,10 @@ describe("SearchService", () => {
 
     const { searchId } = await service.start(query);
     const stream = service.subscribe(searchId)[Symbol.asyncIterator]();
-    await nextOfType(stream, "event.added");
+    const added = await nextOfType(stream, "event.added");
     const updated = await nextOfType(stream, "event.updated");
 
+    expect(updated.event?.id).toBe(added.event?.id);
     expect(updated.event?.descriptionText).toBe("A detailed builder event");
     expect(service.snapshot(searchId)?.events).toHaveLength(1);
   });
