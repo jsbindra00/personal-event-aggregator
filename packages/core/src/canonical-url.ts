@@ -1,4 +1,5 @@
-const trackingParameterPattern = /^(utm_.+|ref|ref_.+|fbclid|gclid|mc_cid|mc_eid)$/i;
+const trackingParameterPattern =
+  /^(utm_.+|ref|ref_.+|aff|aff_.+|fbclid|gclid|mc_cid|mc_eid)$/i;
 
 export function canonicalizeEventUrl(value: string): string {
   let url: URL;
@@ -27,4 +28,3 @@ export function canonicalizeEventUrl(value: string): string {
 
   return url.toString();
 }
-
