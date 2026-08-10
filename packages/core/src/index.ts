@@ -7,6 +7,13 @@ export {
 export { normalizeEvent } from "./normalize.js";
 export { resolveSearchQuery } from "./query.js";
 export { MATCH_WEIGHTS, rankEvent, sortRankedEvents } from "./rank.js";
+export { createSearchService } from "./search-service.js";
+export type {
+  SearchService,
+  SearchServiceOptions,
+  SearchSnapshot,
+  SearchStore
+} from "./search-service.js";
 export type {
   ConnectorMessage,
   ConnectorState,
@@ -20,3 +27,4 @@ export type {
   ResolvedSearchQuery,
   SearchStreamMessage
 } from "./types.js";
+export { AsyncQueue } from "./async-queue.js";

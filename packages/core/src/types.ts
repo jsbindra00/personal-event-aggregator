@@ -122,4 +122,9 @@ export interface SearchStreamMessage {
   source?: EventSource;
   event?: NormalizedEvent;
   status?: ConnectorStatus;
+  progress?: {
+    phase: string;
+    count?: number;
+    resolvedLocation?: string;
+  };
 }
