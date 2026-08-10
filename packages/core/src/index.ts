@@ -29,6 +29,7 @@ export {
 } from "./relevance.js";
 export type { RelevancePolicy } from "./relevance.js";
 export type {
+  RelevanceCache,
   SearchService,
   SearchServiceOptions,
   SearchSnapshot,

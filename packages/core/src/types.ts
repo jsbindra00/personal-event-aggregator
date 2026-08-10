@@ -152,11 +152,15 @@ export interface SearchStreamMessage {
     | "source.failed"
     | "event.added"
     | "event.updated"
+    | "event.maybe"
+    | "relevance.progress"
+    | "relevance.fallback"
     | "source.completed"
     | "search.completed";
   source?: EventSource;
   event?: NormalizedEvent;
   status?: ConnectorStatus;
+  relevance?: RelevanceStatus;
   progress?: {
     phase: string;
     count?: number;
