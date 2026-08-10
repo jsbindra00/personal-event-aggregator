@@ -99,6 +99,15 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  packages/connector-guild:
+    dependencies:
+      '@event-agg/browser':
+        specifier: workspace:*
+        version: link:../browser
+      '@event-agg/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/connector-luma:
     dependencies:
       '@event-agg/browser':
