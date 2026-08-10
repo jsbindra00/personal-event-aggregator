@@ -86,6 +86,20 @@ const migration = `
     error_code text,
     safe_message text
   );
+
+  create table if not exists relevance_cache (
+    event_fingerprint text not null,
+    profile_fingerprint text not null,
+    evaluator_fingerprint text not null,
+    event_id text not null,
+    decision text not null check (decision in ('show', 'maybe', 'hide')),
+    score real not null,
+    confidence real not null,
+    matched_interests_json text not null,
+    reason text not null,
+    created_at text not null,
+    primary key (event_fingerprint, profile_fingerprint, evaluator_fingerprint)
+  );
 `;
 
 export function openDatabase(path: string): AppDatabase {
@@ -104,5 +118,37 @@ export function openDatabase(path: string): AppDatabase {
   database.pragma("foreign_keys = ON");
   database.pragma("busy_timeout = 5000");
   database.exec(migration);
+  ensureColumn(
+    database,
+    "search_events",
+    "relevance_decision",
+    "text not null default 'show'"
+  );
+  ensureColumn(
+    database,
+    "search_events",
+    "relevance_confidence",
+    "real not null default 0"
+  );
+  ensureColumn(
+    database,
+    "search_events",
+    "relevance_reason",
+    "text not null default ''"
+  );
   return database;
+}
+
+function ensureColumn(
+  database: AppDatabase,
+  table: string,
+  column: string,
+  definition: string
+): void {
+  const columns = database
+    .prepare(`pragma table_info(${table})`)
+    .all() as Array<{ name: string }>;
+  if (!columns.some((candidate) => candidate.name === column)) {
+    database.exec(`alter table ${table} add column ${column} ${definition}`);
+  }
 }

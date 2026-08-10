@@ -1,9 +1,14 @@
+import { createHash } from "node:crypto";
+
+import { relevanceDecisionSchema } from "@event-agg/core";
 import type {
   ConnectorState,
   ConnectorStatus,
   EventSource,
   InterestProfile,
   NormalizedEvent,
+  RelevanceDecision,
+  RelevanceDecisionKind,
   ResolvedSearchQuery
 } from "@event-agg/core";
 
@@ -33,6 +38,17 @@ export interface StoredSearchSource {
 }
 
 export interface SearchSourceInput extends StoredSearchSource {}
+
+export interface RelevanceCacheKey {
+  eventFingerprint: string;
+  profileFingerprint: string;
+  evaluatorFingerprint: string;
+}
+
+export interface RelevanceCacheInput extends RelevanceCacheKey {
+  decision: RelevanceDecision;
+  createdAt: string;
+}
 
 function parseStringArray(value: string): string[] {
   const parsed: unknown = JSON.parse(value);
@@ -226,32 +242,47 @@ export class EventRepository {
     this.database
       .prepare(
         `insert into search_events (
-          search_id, event_id, relevance_score, event_rank, matched_interests_json
-        ) values (?, ?, ?, ?, ?)
+          search_id, event_id, relevance_score, event_rank, matched_interests_json,
+          relevance_decision, relevance_confidence, relevance_reason
+        ) values (?, ?, ?, ?, ?, ?, ?, ?)
         on conflict(search_id, event_id) do update set
           relevance_score = excluded.relevance_score,
           event_rank = excluded.event_rank,
-          matched_interests_json = excluded.matched_interests_json`
+          matched_interests_json = excluded.matched_interests_json,
+          relevance_decision = excluded.relevance_decision,
+          relevance_confidence = excluded.relevance_confidence,
+          relevance_reason = excluded.relevance_reason`
       )
       .run(
         searchId,
         event.id,
         event.relevanceScore,
         rank,
-        JSON.stringify(event.matchedInterests)
+        JSON.stringify(event.matchedInterests),
+        event.relevanceDecision,
+        event.relevanceConfidence,
+        event.relevanceReason
       );
   }
 
-  public listForSearch(searchId: string): NormalizedEvent[] {
+  public listForSearch(
+    searchId: string,
+    decision?: RelevanceDecisionKind
+  ): NormalizedEvent[] {
+    const decisionFilter = decision === undefined ? "" : "and se.relevance_decision = ?";
     const rows = this.database
       .prepare(
-        `select e.*, se.relevance_score, se.matched_interests_json
+        `select e.*, se.relevance_score, se.matched_interests_json,
+                se.relevance_decision, se.relevance_confidence, se.relevance_reason
          from search_events se
          join events e on e.id = se.event_id
          where se.search_id = ?
+         ${decisionFilter}
          order by se.event_rank, e.starts_at, e.title`
       )
-      .all(searchId) as Array<Record<string, unknown>>;
+      .all(...(decision === undefined ? [searchId] : [searchId, decision])) as Array<
+        Record<string, unknown>
+      >;
 
     return rows.map((row) => ({
       id: String(row.id),
@@ -273,11 +304,101 @@ export class EventRepository {
       imageUrl: row.image_url == null ? null : String(row.image_url),
       priceText: row.price_text == null ? null : String(row.price_text),
       tags: parseStringArray(String(row.tags_json)),
+      relevanceDecision: storedDecision(row.relevance_decision),
       relevanceScore: Number(row.relevance_score),
+      relevanceConfidence: boundedConfidence(row.relevance_confidence),
+      relevanceReason: String(row.relevance_reason),
       matchedInterests: parseStringArray(String(row.matched_interests_json)),
       firstSeenAt: String(row.first_seen_at)
     }));
   }
+}
+
+export class RelevanceCacheRepository {
+  public constructor(private readonly database: AppDatabase) {}
+
+  public get(key: RelevanceCacheKey): RelevanceDecision | null {
+    const row = this.database
+      .prepare(
+        `select event_id, decision, score, confidence, matched_interests_json, reason
+         from relevance_cache
+         where event_fingerprint = ?
+           and profile_fingerprint = ?
+           and evaluator_fingerprint = ?`
+      )
+      .get(
+        key.eventFingerprint,
+        key.profileFingerprint,
+        key.evaluatorFingerprint
+      ) as Record<string, unknown> | undefined;
+    if (row === undefined) return null;
+    const parsed = relevanceDecisionSchema.safeParse({
+      eventId: row.event_id,
+      decision: row.decision,
+      score: row.score,
+      confidence: row.confidence,
+      matchedInterests: parseStringArray(String(row.matched_interests_json)),
+      reason: row.reason
+    });
+    if (!parsed.success) throw new Error("Stored relevance decision is invalid");
+    return parsed.data;
+  }
+
+  public put(input: RelevanceCacheInput): void {
+    const decision = relevanceDecisionSchema.parse(input.decision);
+    this.database
+      .prepare(
+        `insert into relevance_cache (
+          event_fingerprint, profile_fingerprint, evaluator_fingerprint,
+          event_id, decision, score, confidence, matched_interests_json,
+          reason, created_at
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        on conflict(event_fingerprint, profile_fingerprint, evaluator_fingerprint)
+        do update set
+          event_id = excluded.event_id,
+          decision = excluded.decision,
+          score = excluded.score,
+          confidence = excluded.confidence,
+          matched_interests_json = excluded.matched_interests_json,
+          reason = excluded.reason,
+          created_at = excluded.created_at`
+      )
+      .run(
+        input.eventFingerprint,
+        input.profileFingerprint,
+        input.evaluatorFingerprint,
+        decision.eventId,
+        decision.decision,
+        decision.score,
+        decision.confidence,
+        JSON.stringify(decision.matchedInterests),
+        decision.reason,
+        input.createdAt
+      );
+  }
+}
+
+export function eventRelevanceFingerprint(event: NormalizedEvent): string {
+  return sha256(
+    JSON.stringify({
+      canonicalUrl: event.canonicalUrl,
+      title: event.title,
+      descriptionText: event.descriptionText,
+      organizerName: event.organizerName,
+      venueName: event.venueName,
+      tags: event.tags
+    })
+  );
+}
+
+export function profileRelevanceFingerprint(profile: InterestProfile): string {
+  return sha256(
+    JSON.stringify({
+      positive: [...profile.positive].sort(),
+      excluded: [...profile.excluded].sort(),
+      note: profile.note
+    })
+  );
 }
 
 export class ConnectorStatusRepository {
@@ -324,9 +445,26 @@ export function createRepositories(database: AppDatabase) {
     interests: new InterestRepository(database),
     searches: new SearchRepository(database),
     events: new EventRepository(database),
+    relevanceCache: new RelevanceCacheRepository(database),
     connectorStatuses: new ConnectorStatusRepository(database)
   };
 }
 
 export type Repositories = ReturnType<typeof createRepositories>;
 
+function storedDecision(value: unknown): RelevanceDecisionKind {
+  if (value === "show" || value === "maybe" || value === "hide") return value;
+  throw new Error("Stored relevance decision is invalid");
+}
+
+function boundedConfidence(value: unknown): number {
+  const confidence = Number(value);
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+    throw new Error("Stored relevance confidence is invalid");
+  }
+  return confidence;
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}

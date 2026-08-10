@@ -4,10 +4,15 @@ export {
   ConnectorStatusRepository,
   EventRepository,
   InterestRepository,
+  RelevanceCacheRepository,
   SearchRepository,
-  createRepositories
+  createRepositories,
+  eventRelevanceFingerprint,
+  profileRelevanceFingerprint
 } from "./repositories.js";
 export type {
+  RelevanceCacheInput,
+  RelevanceCacheKey,
   Repositories,
   SearchSourceInput,
   StoredSearch,
