@@ -64,4 +64,22 @@ describe("App", () => {
     expect(link.getAttribute("href")).toBe("https://lu.ma/example");
     expect(screen.getByText("AI Builders")).toBeTruthy();
   });
+
+  it("offers a source-scoped sign-in action from safe connector status", async () => {
+    const api = createTestEventApi();
+    api.connectorStatuses[0] = {
+      source: "luma",
+      state: "auth_required",
+      lastSuccessAt: null,
+      errorCode: "auth_required",
+      safeMessage: "Sign in to Luma"
+    };
+    const user = userEvent.setup();
+    render(<App api={api} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Sign in again Luma" })
+    );
+    expect(api.connectedSources).toEqual(["luma"]);
+  });
 });

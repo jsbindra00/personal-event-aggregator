@@ -11,9 +11,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@event-agg/browser": "workspace:*",
+    "@event-agg/connector-eventbrite": "workspace:*",
+    "@event-agg/connector-guild": "workspace:*",
+    "@event-agg/connector-luma": "workspace:*",
+    "@event-agg/connector-meetup": "workspace:*",
     "@event-agg/core": "workspace:*",
     "@event-agg/storage": "workspace:*",
     "fastify": "^5.11.3",
+    "playwright-core": "^1.58.2",
     "zod": "^4.4.3"
   }
 }

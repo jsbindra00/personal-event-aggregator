@@ -86,6 +86,7 @@ export interface SearchService {
   subscribe(searchId: string, afterSequence?: number): AsyncIterable<SearchStreamMessage>;
   snapshot(searchId: string): SearchSnapshot | null;
   cancel(searchId: string): void;
+  cancelAll(): void;
 }
 
 class DefaultSearchService implements SearchService {
@@ -210,6 +211,12 @@ class DefaultSearchService implements SearchService {
       this.finishSource(run, source, "cancelled", "source.completed");
     }
     this.finishSearch(run);
+  }
+
+  public cancelAll(): void {
+    for (const run of this.runs.values()) {
+      if (run.status === "running") this.cancel(run.searchId);
+    }
   }
 
   private async consumeConnector(

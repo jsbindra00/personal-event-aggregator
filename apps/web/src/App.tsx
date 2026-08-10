@@ -40,6 +40,14 @@ export function App({ api }: AppProps) {
     setProfile(await api.setInterests(next));
   }
 
+  async function connectSource(source: EventSource) {
+    await api.connectSource(source);
+    const next = await api.getConnectors();
+    setBaseStatuses(
+      Object.fromEntries(next.map((status) => [status.source, status]))
+    );
+  }
+
   return (
     <main>
       <header className="hero">
@@ -61,7 +69,7 @@ export function App({ api }: AppProps) {
           onSearch={search.start}
           onStop={search.stop}
         />
-        <SourceStatus statuses={statuses} />
+        <SourceStatus statuses={statuses} onConnect={connectSource} />
       </section>
 
       <section className="results-section">
@@ -78,4 +86,3 @@ export function App({ api }: AppProps) {
     </main>
   );
 }
-

@@ -47,6 +47,8 @@ textarea:focus, input:focus { border-color: var(--acid); box-shadow: 0 0 0 1px v
 .source-strip { display: flex; gap: 10px; padding: 14px 18px; overflow-x: auto; }
 .source-chip { display: flex; align-items: center; gap: 7px; white-space: nowrap; color: var(--muted); font-size: 12px; text-transform: capitalize; }
 .source-chip strong { color: #d8ddd5; }
+.source-action { margin-left: 3px; padding: 3px 7px; border: 1px solid #3e493d; color: var(--acid); background: transparent; cursor: pointer; font: inherit; }
+.source-action:hover { border-color: var(--acid); }
 .source-dot { width: 7px; height: 7px; border-radius: 50%; background: #545c53; }
 .state-searching .source-dot, .state-ready .source-dot, .state-complete .source-dot { background: var(--acid); box-shadow: 0 0 8px #c8ff3d99; }
 .state-failed .source-dot, .state-auth_required .source-dot { background: #ff705c; }

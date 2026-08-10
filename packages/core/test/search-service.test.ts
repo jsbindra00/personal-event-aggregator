@@ -264,6 +264,23 @@ describe("SearchService", () => {
     ).toHaveLength(1);
   });
 
+  it("cancels every active search during shutdown", async () => {
+    const waiting = new TestConnector("guild", async function* (_query, signal) {
+      await new Promise<void>((resolve) =>
+        signal.addEventListener("abort", () => resolve(), { once: true })
+      );
+    });
+    const service = serviceWith([waiting]);
+    const { searchId } = await service.start(query);
+
+    service.cancelAll();
+
+    expect(service.snapshot(searchId)?.status).toBe("cancelled");
+    const replayed: SearchStreamMessage[] = [];
+    for await (const message of service.subscribe(searchId)) replayed.push(message);
+    expect(replayed.at(-1)?.type).toBe("search.completed");
+  });
+
   it("bounds replay history without affecting the live stream", async () => {
     const service = createSearchService({
       connectors: [
