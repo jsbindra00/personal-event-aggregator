@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+work/
 .data/
 *.log
 .env
@@ -8,4 +9,3 @@ coverage/
 *.har
 *.unredacted.*
 .DS_Store
-
