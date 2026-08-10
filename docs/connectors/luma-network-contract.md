@@ -1,11 +1,11 @@
 # Luma discovery network contract
 
-Observed on 2026-08-10 from Luma's public London discovery page in Chrome. The observation was read-only, limited to first-party Fetch/XHR traffic, and performed without exporting cookies or request headers.
+Observed on 2026-08-10 from Luma's public London discovery page. The observation was read-only, limited to first-party page and JSON traffic, and performed without exporting cookies or request headers. Production now calls this public discovery contract directly; the browser implementation is retained only as a contract-drift fallback.
 
 ## Search action
 
 - Connect URL: `https://luma.com/london?k=p`
-- UI action: navigate to the city discovery route; scroll to the bottom to request later pages.
+- Location discovery: `GET https://luma.com/discover`, select an exact allowlisted `luma.com/<city>?k=p` link, then read `props.pageProps.initialData.data.place.api_id` from the city page's `__NEXT_DATA__` script.
 - Search request: `GET https://api.luma.com/discover/get-paginated-events`
 - Allowed response host: `api.luma.com`
 - Response match: pathname equals `/discover/get-paginated-events`, method is `GET`, status is `200`, and the content type is JSON.

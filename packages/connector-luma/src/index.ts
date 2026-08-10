@@ -12,3 +12,10 @@ export {
   parseLumaSearchPayload
 } from "./parser.js";
 export type { ParsedLumaPage } from "./parser.js";
+export {
+  LumaLocationError,
+  resolveLumaPlace
+} from "./location.js";
+export type { LumaPlace } from "./location.js";
+export { createDirectLumaConnector } from "./direct.js";
+export type { DirectLumaOptions } from "./direct.js";
