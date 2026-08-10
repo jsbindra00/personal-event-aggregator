@@ -6,6 +6,7 @@ export type {
 export {
   enforceReadOnlyMeetupPage,
   meetupOperationName,
+  meetupSelectionMatches,
   meetupSearchContract
 } from "./contract.js";
 export {

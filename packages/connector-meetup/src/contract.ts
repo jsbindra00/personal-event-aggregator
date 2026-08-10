@@ -17,10 +17,41 @@ export const meetupSearchContract: ObservedSearchContract = {
   allowedHosts: ["www.meetup.com"],
   connectUrl: FIND_URL,
   async performSearch(page, query) {
-    const target = new URL(FIND_URL);
-    target.searchParams.set("location", query.locationText);
-    target.searchParams.set("source", "EVENTS");
-    await page.goto(target.href, { waitUntil: "networkidle" });
+    await page.goto(FIND_URL, { waitUntil: "domcontentloaded" });
+    if (new URL(page.url()).pathname.startsWith("/login")) {
+      throw new Error("meetup_login_required");
+    }
+
+    const locationInput = page.getByLabel(
+      "Search for location by city or zip code"
+    );
+    await locationInput.fill(query.locationText);
+    await page.waitForTimeout(700);
+    const resultsReady = page.waitForResponse(
+      (response) => meetupSearchContract.responseMatches(response),
+      { timeout: 20_000 }
+    );
+    await locationInput.press("ArrowDown");
+    await locationInput.press("Enter");
+    let selectionResolved = false;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (
+        meetupSelectionMatches(
+          query.locationText,
+          await locationInput.inputValue(),
+          page.url()
+        )
+      ) {
+        selectionResolved = true;
+        break;
+      }
+      await page.waitForTimeout(250);
+    }
+    if (!selectionResolved) {
+      void resultsReady.catch(() => undefined);
+      throw new Error("meetup_location_unresolved");
+    }
+    await resultsReady;
     if (new URL(page.url()).pathname.startsWith("/login")) {
       throw new Error("meetup_login_required");
     }
@@ -34,6 +65,38 @@ export const meetupSearchContract: ObservedSearchContract = {
     );
   }
 };
+
+export function meetupSelectionMatches(
+  query: string,
+  inputValue: string,
+  pageUrl: string
+): boolean {
+  let selectedLocation: string;
+  try {
+    selectedLocation = new URL(pageUrl).searchParams.get("location") ?? "";
+  } catch {
+    return false;
+  }
+  const normalizedQuery = normalizeLocationText(query);
+  const normalizedInput = normalizeLocationText(inputValue);
+  const normalizedLocation = normalizeLocationText(selectedLocation);
+  return normalizedQuery
+    .split(" ")
+    .filter((token) => token.length >= 3)
+    .some(
+      (token) =>
+        normalizedLocation.includes(token) ||
+        (normalizedInput !== normalizedQuery && normalizedInput.includes(token))
+    );
+}
+
+function normalizeLocationText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase("en")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
 
 const protectedPages = new WeakSet<Page>();
 

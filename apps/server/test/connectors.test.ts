@@ -10,15 +10,21 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import {
   createProductionDependencies,
+  serializeConnectorOperations,
   type ProductionDependencies
 } from "../src/dependencies.js";
 
 class FakeBrowserHost {
   readonly opened: Array<{ source: EventSource; url: string }> = [];
+  readonly closed: EventSource[] = [];
 
   async pageFor(source: EventSource, url: string): Promise<never> {
     this.opened.push({ source, url });
     return undefined as never;
+  }
+
+  async closeSource(source: EventSource): Promise<void> {
+    this.closed.push(source);
   }
 
   async close(): Promise<void> {}
@@ -121,5 +127,51 @@ describe("production connector wiring", () => {
         url: "https://www.meetup.com/find/?source=EVENTS"
       }
     ]);
+    expect(browserHost.closed).toEqual(["meetup"]);
+  });
+
+  it("serializes overlapping operations for a shared source page", async () => {
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const starts: number[] = [];
+    const base: EventConnector = {
+      source: "luma",
+      getStatus: async () => status("luma", "ready"),
+      connect: async function* () {
+        starts.push(starts.length + 1);
+        yield { type: "complete", source: "luma", count: 0 };
+      },
+      search: async function* () {
+        starts.push(starts.length + 1);
+        if (starts.length === 1) await firstGate;
+        yield { type: "complete", source: "luma", count: 0 };
+      }
+    };
+    const connector = serializeConnectorOperations(base);
+    const resolvedQuery: ResolvedSearchQuery = {
+      locationText: "London",
+      startDate: "2026-08-10",
+      endDate: "2026-08-12",
+      timeZone: "Europe/London",
+      startsAtUtc: "2026-08-09T23:00:00.000Z",
+      endsBeforeUtc: "2026-08-12T23:00:00.000Z"
+    };
+    const collect = async (iterable: AsyncIterable<ConnectorMessage>) => {
+      for await (const _message of iterable) {
+        // Drain the operation.
+      }
+    };
+
+    const first = collect(connector.search(resolvedQuery, new AbortController().signal));
+    await Promise.resolve();
+    const second = collect(connector.connect());
+    await Promise.resolve();
+    expect(starts).toEqual([1]);
+
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(starts).toEqual([1, 2]);
   });
 });

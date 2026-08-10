@@ -61,6 +61,16 @@ function searchableText(event: NormalizedEvent): string {
   );
 }
 
+export function isEventExcluded(
+  event: NormalizedEvent,
+  profile: InterestProfile
+): boolean {
+  const allText = searchableText(event);
+  return profile.excluded.some((excluded) =>
+    includesPhrase(allText, normalizedText(excluded))
+  );
+}
+
 export function rankEvent(
   event: NormalizedEvent,
   profile: InterestProfile
@@ -76,12 +86,9 @@ export function rankEvent(
     }
   }
 
+  if (isEventExcluded(event, profile)) relevanceScore += MATCH_WEIGHTS.exclusion;
+
   const allText = searchableText(event);
-  for (const excluded of profile.excluded) {
-    if (includesPhrase(allText, normalizedText(excluded))) {
-      relevanceScore += MATCH_WEIGHTS.exclusion;
-    }
-  }
 
   if (profile.note && includesPhrase(allText, normalizedText(profile.note))) {
     relevanceScore += 1;
@@ -100,4 +107,3 @@ export function sortRankedEvents(
       left.title.localeCompare(right.title)
   );
 }
-

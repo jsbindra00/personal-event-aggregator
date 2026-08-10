@@ -25,16 +25,22 @@ function response(options: {
   contentType?: string;
   body?: string;
   contentLength?: string;
+  status?: number;
+  retryAfter?: string;
 } = {}): Response {
   const body = options.body ?? '{"events":[{"title":"Safe fixture"}]}';
   return {
     url: () => options.url ?? "http://127.0.0.1/events.json",
     headers: () => ({
       "content-type": options.contentType ?? "application/json",
+      ...(options.retryAfter === undefined
+        ? {}
+        : { "retry-after": options.retryAfter }),
       ...(options.contentLength === undefined
         ? {}
         : { "content-length": options.contentLength })
     }),
+    status: () => options.status ?? 200,
     body: async () => Buffer.from(body)
   } as unknown as Response;
 }
@@ -88,5 +94,18 @@ describe("observeJsonResponses", () => {
       async () => undefined
     );
     expect(payloads).toEqual([]);
+  });
+
+  it("surfaces an observed rate limit without reading its body", async () => {
+    const page = createPage();
+    await expect(
+      observeJsonResponses(page as unknown as Page, policy, async () =>
+        page.emit(response({ status: 429, retryAfter: "2" }))
+      )
+    ).rejects.toMatchObject({
+      name: "ObservedHttpError",
+      status: 429,
+      retryAfterMs: 2_000
+    });
   });
 });

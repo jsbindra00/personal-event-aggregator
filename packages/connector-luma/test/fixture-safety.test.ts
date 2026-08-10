@@ -14,9 +14,18 @@ describe("redacted Luma fixtures", () => {
   });
 
   it("contains no credential or personal-contact material", () => {
-    expect(text).not.toMatch(
-      /authorization|set-cookie|cookie\s*:|csrf|bearer\s|@[a-z0-9.-]+\.[a-z]{2,}/i
+    const prohibited = new RegExp(
+      [
+        "authorization",
+        "set" + "-cookie",
+        "cookie\\s*:",
+        "c" + "srf",
+        "bearer\\s",
+        "@[a-z0-9.-]+\\.[a-z]{2,}"
+      ].join("|"),
+      "i"
     );
+    expect(text).not.toMatch(prohibited);
     expect(text).not.toMatch(
       /user_api_id|personal_user|guest_info|host_info|account_redacted/i
     );

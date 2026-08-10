@@ -6,6 +6,16 @@ export interface ObserveJsonPolicy {
   responseMatches(response: Response): boolean;
 }
 
+export class ObservedHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly retryAfterMs: number | null
+  ) {
+    super(`Observed event source returned HTTP ${status}`);
+    this.name = "ObservedHttpError";
+  }
+}
+
 export async function observeJsonResponses(
   page: Page,
   policy: ObserveJsonPolicy,
@@ -50,6 +60,12 @@ function captureJsonResponse(
   if (!policy.responseMatches(response)) return null;
 
   const headers = response.headers();
+  const status = response.status();
+  if (status >= 400) {
+    return Promise.reject(
+      new ObservedHttpError(status, retryAfterMilliseconds(headers["retry-after"]))
+    );
+  }
   if (!isJsonContentType(headers["content-type"])) return null;
 
   const declaredLength = Number(headers["content-length"]);
@@ -61,6 +77,14 @@ function captureJsonResponse(
   }
 
   return readBoundedJson(response, policy.maxBodyBytes);
+}
+
+function retryAfterMilliseconds(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1_000);
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? null : Math.max(0, at - Date.now());
 }
 
 async function readBoundedJson(

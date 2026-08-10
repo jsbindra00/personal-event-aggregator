@@ -1,5 +1,28 @@
 const trackingParameterPattern =
   /^(utm_.+|ref|ref_.+|aff|aff_.+|fbclid|gclid|mc_cid|mc_eid)$/i;
+const sensitiveParameterNames = new Set([
+  "authorization",
+  "apikey",
+  "accesstoken",
+  "refreshtoken",
+  "password",
+  "secret",
+  "sid",
+  "session",
+  "sessionid",
+  "signature"
+]);
+
+function isSensitiveParameter(key: string): boolean {
+  const normalized = key.toLocaleLowerCase("en").replace(/[^a-z0-9]/g, "");
+  return (
+    sensitiveParameterNames.has(normalized) ||
+    normalized.endsWith("token") ||
+    normalized.endsWith("secret") ||
+    normalized.endsWith("password") ||
+    normalized.includes("session")
+  );
+}
 
 export function canonicalizeEventUrl(value: string): string {
   let url: URL;
@@ -20,7 +43,7 @@ export function canonicalizeEventUrl(value: string): string {
 
   url.hash = "";
   for (const key of [...url.searchParams.keys()]) {
-    if (trackingParameterPattern.test(key)) {
+    if (trackingParameterPattern.test(key) || isSensitiveParameter(key)) {
       url.searchParams.delete(key);
     }
   }

@@ -1,5 +1,6 @@
 export {
   ConnectorFailure,
+  classifyConnectorError,
   connectorFailure,
   withConnectorRetry
 } from "./retry.js";

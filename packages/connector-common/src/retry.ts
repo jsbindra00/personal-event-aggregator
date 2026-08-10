@@ -39,6 +39,47 @@ export function connectorFailure(
   return new ConnectorFailure(code, safeMessage, options);
 }
 
+export function classifyConnectorError(error: unknown): unknown {
+  if (error instanceof ConnectorFailure) return error;
+
+  if (typeof error === "object" && error !== null) {
+    const candidate = error as {
+      name?: unknown;
+      status?: unknown;
+      retryAfterMs?: unknown;
+    };
+    if (
+      candidate.name === "ObservedHttpError" &&
+      typeof candidate.status === "number"
+    ) {
+      const options =
+        typeof candidate.retryAfterMs === "number"
+          ? { cause: error, retryAfterMs: candidate.retryAfterMs }
+          : { cause: error };
+      if (candidate.status === 401 || candidate.status === 403) {
+        return connectorFailure("auth_required", "Sign in to this event source", {
+          cause: error
+        });
+      }
+      if (candidate.status === 429) {
+        return connectorFailure("rate_limited", "Event source rate limit reached", options);
+      }
+      if (candidate.status === 408 || candidate.status >= 500) {
+        return connectorFailure("network", "Event source is temporarily unavailable", {
+          cause: error
+        });
+      }
+    }
+  }
+
+  if (error instanceof Error && error.name === "TimeoutError") {
+    return connectorFailure("network", "Event source request timed out", {
+      cause: error
+    });
+  }
+  return error;
+}
+
 export async function withConnectorRetry<T>(
   action: (attempt: number) => Promise<T>,
   options: ConnectorRetryOptions = {}

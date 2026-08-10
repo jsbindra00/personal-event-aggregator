@@ -11,9 +11,10 @@
     "build": "pnpm -r build",
     "dev": "pnpm --parallel --filter @event-agg/server --filter @event-agg/web dev",
     "test": "vitest run",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.test.json --noEmit"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/node": "^26.2.0",
     "tsx": "^4.23.11",
     "typescript": "^7.0.2",

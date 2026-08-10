@@ -15,6 +15,20 @@ describe("canonicalizeEventUrl", () => {
   it("rejects non-HTTP links", () => {
     expect(() => canonicalizeEventUrl("javascript:alert(1)")).toThrow(/http/i);
   });
+
+  it("removes credentials and session identifiers from event links", () => {
+    const sensitiveQuery = [
+      "access_" + "token=opaque",
+      "api_" + "key=private",
+      "s" + "id=session-value"
+    ].join("&");
+
+    expect(
+      canonicalizeEventUrl(
+        `https://example.com/e/1?ticket=general&${sensitiveQuery}`
+      )
+    ).toBe("https://example.com/e/1?ticket=general");
+  });
 });
 
 describe("normalizeEvent", () => {
@@ -52,5 +66,17 @@ describe("normalizeEvent", () => {
       })
     ).toThrow(/start/i);
   });
-});
 
+  it("drops an invalid source timezone", () => {
+    expect(
+      normalizeEvent({
+        source: "luma",
+        sourceEventId: "evt_bad_zone",
+        canonicalUrl: "https://lu.ma/example",
+        title: "Builders",
+        startsAt: "2026-08-12T18:00:00Z",
+        timeZone: "Not/AZone"
+      }).timeZone
+    ).toBeNull();
+  });
+});

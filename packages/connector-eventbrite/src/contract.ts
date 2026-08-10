@@ -18,7 +18,19 @@ export const eventbriteSearchContract: ObservedSearchContract = {
         `Eventbrite needs a supported city for ${query.locationText}`
       );
     }
-    await page.goto(target, { waitUntil: "networkidle" });
+    const response = await page.goto(target, { waitUntil: "networkidle" });
+    const status = response?.status();
+    if (status === 401 || status === 403) {
+      throw connectorFailure("auth_required", "Sign in to Eventbrite");
+    }
+    if (status === 429) {
+      throw connectorFailure("rate_limited", "Eventbrite rate limit reached", {
+        retryAfterMs: retryAfterMilliseconds(response?.headers()["retry-after"])
+      });
+    }
+    if (status === 408 || (status !== undefined && status >= 500)) {
+      throw connectorFailure("network", "Eventbrite is temporarily unavailable");
+    }
     if (new URL(page.url()).pathname.startsWith("/signin")) {
       throw connectorFailure("auth_required", "Sign in to Eventbrite");
     }
@@ -32,6 +44,14 @@ export const eventbriteSearchContract: ObservedSearchContract = {
     );
   }
 };
+
+function retryAfterMilliseconds(value: string | undefined): number {
+  if (value === undefined) return 1_000;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1_000);
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? 1_000 : Math.max(0, at - Date.now());
+}
 
 const protectedPages = new WeakSet<Page>();
 

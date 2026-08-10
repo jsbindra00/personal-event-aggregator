@@ -6,12 +6,18 @@ export {
 } from "./dedupe.js";
 export { normalizeEvent } from "./normalize.js";
 export { resolveSearchQuery } from "./query.js";
+export { redactDiagnostic } from "./redact.js";
 export {
   eventSearchQuerySchema,
   eventSourceSchema,
   interestProfileSchema
 } from "./schemas.js";
-export { MATCH_WEIGHTS, rankEvent, sortRankedEvents } from "./rank.js";
+export {
+  MATCH_WEIGHTS,
+  isEventExcluded,
+  rankEvent,
+  sortRankedEvents
+} from "./rank.js";
 export { createSearchService } from "./search-service.js";
 export type {
   SearchService,

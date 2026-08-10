@@ -6,6 +6,7 @@ import type {
   ConnectorStatus,
   EventConnector,
   EventSource,
+  NormalizedEvent,
   RawSourceEvent,
   ResolvedSearchQuery,
   SearchStreamMessage
@@ -310,5 +311,78 @@ describe("SearchService", () => {
     }
     expect(replayed).toHaveLength(3);
     expect(replayed.at(-1)?.type).toBe("search.completed");
+  });
+
+  it("filters excluded topics before emitting or persisting events", async () => {
+    const saved: NormalizedEvent[] = [];
+    const store: SearchStore = {
+      ...memoryStore(),
+      saveEvent: (_searchId, event) => saved.push(event)
+    };
+    const service = createSearchService({
+      connectors: [
+        connectorFromMessages("luma", [
+          {
+            type: "event",
+            source: "luma",
+            event: rawEvent("luma", { title: "Crypto Trading Masterclass" })
+          },
+          { type: "complete", source: "luma", count: 1 }
+        ])
+      ],
+      store,
+      getInterests: () => ({ positive: [], excluded: ["crypto"], note: "" }),
+      createId: () => "excluded-search",
+      now: () => new Date("2026-08-10T00:00:00.000Z")
+    });
+
+    const { searchId } = await service.start(query);
+    const messages: SearchStreamMessage[] = [];
+    for await (const message of service.subscribe(searchId)) messages.push(message);
+
+    expect(messages.some(({ type }) => type === "event.added")).toBe(false);
+    expect(service.snapshot(searchId)?.events).toEqual([]);
+    expect(saved).toEqual([]);
+  });
+
+  it("uses one interest-profile snapshot for an entire search", async () => {
+    let reads = 0;
+    const service = createSearchService({
+      connectors: [
+        connectorFromMessages("luma", [
+          { type: "event", source: "luma", event: rawEvent("luma") },
+          {
+            type: "event",
+            source: "luma",
+            event: rawEvent("luma", {
+              sourceEventId: "luma-2",
+              canonicalUrl: "https://events.example/luma-2",
+              title: "AI Engineers London"
+            })
+          },
+          { type: "complete", source: "luma", count: 2 }
+        ])
+      ],
+      store: memoryStore(),
+      getInterests: () => {
+        reads += 1;
+        return reads === 1
+          ? { positive: ["AI"], excluded: [], note: "" }
+          : { positive: ["gardening"], excluded: [], note: "" };
+      },
+      createId: () => "profile-search",
+      now: () => new Date("2026-08-10T00:00:00.000Z")
+    });
+
+    const { searchId } = await service.start(query);
+    for await (const _message of service.subscribe(searchId)) {
+      // Wait for the search to finish.
+    }
+
+    expect(reads).toBe(1);
+    expect(service.snapshot(searchId)?.events).toHaveLength(2);
+    expect(
+      service.snapshot(searchId)?.events.every(({ relevanceScore }) => relevanceScore > 0)
+    ).toBe(true);
   });
 });

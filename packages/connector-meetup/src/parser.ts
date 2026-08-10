@@ -1,4 +1,4 @@
-import type { RawSourceEvent } from "@event-agg/core";
+import { canonicalizeEventUrl, type RawSourceEvent } from "@event-agg/core";
 import { z } from "zod";
 
 const photoSchema = z
@@ -124,7 +124,7 @@ function mapNode(node: z.infer<typeof nodeSchema>): RawSourceEvent {
   return {
     source: "meetup",
     sourceEventId: node.id,
-    canonicalUrl: canonicalUrl.href,
+    canonicalUrl: canonicalizeEventUrl(canonicalUrl.href),
     title: node.title,
     startsAt: node.dateTime,
     endsAt: null,

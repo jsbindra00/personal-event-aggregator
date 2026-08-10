@@ -5,12 +5,12 @@ Observed on 2026-08-10 from Meetup's normal Find Events page in an isolated Chro
 ## Search action and location resolution
 
 - Connect URL: `https://www.meetup.com/find/?source=EVENTS`
-- Search action: navigate to the same page with `location=<URL-encoded city or address>&source=EVENTS`.
+- Search action: load Find Events, fill the labelled location input, then select the first autocomplete result with the keyboard.
 - Observed city input: `London`
 - Resolved UI value: `London, GB`
 - Observed London coordinates sent by the page: latitude `51.45000076293945`, longitude `-0.23999999463558197`.
 
-The UI also exposes a location input labelled `Search for location by city or zip code`. Typing `London` produced first-party `getLocationSearch` suggestions. Direct navigation with either `London` or `221B Baker Street, London` resolved to the London search state in the observed run. The connector lets Meetup's page resolve the input; it does not construct coordinates itself.
+The UI exposes a location input labelled `Search for location by city or zip code`. Typing `London` produced first-party `getLocationSearch` suggestions. A later live acceptance run showed that a raw `location=London` URL can retain an unrelated profile location even while displaying the raw query in the URL. The connector therefore selects the first current autocomplete result and waits for the resulting event request. It lets Meetup's current page resolve a city or address; it does not construct coordinates itself.
 
 ## Event request
 

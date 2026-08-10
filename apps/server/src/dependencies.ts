@@ -39,6 +39,7 @@ const connectUrls: Record<EventSource, string> = {
 
 export interface ServerBrowserHost {
   pageFor(source: EventSource, url: string): Promise<Page>;
+  closeSource(source: EventSource): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -46,6 +47,7 @@ export interface ProductionDependencyOptions {
   databasePath?: string;
   browserHost?: ServerBrowserHost;
   connectors?: EventConnector[];
+  diagnostic?: (value: unknown) => void;
 }
 
 export interface ProductionDependencies extends AppDependencies {
@@ -64,22 +66,40 @@ export function createProductionDependencies(
   );
   const repositories = createRepositories(database);
   const browserHost = options.browserHost ?? new BrowserHost();
+  const diagnosticOptions =
+    options.diagnostic === undefined ? {} : { diagnostic: options.diagnostic };
   const rawConnectors =
     options.connectors ??
     [
-      createLumaConnector(browserHost),
-      createMeetupConnector(browserHost),
-      createEventbriteConnector(browserHost),
+      withSearchDelay(
+        createLumaConnector(browserHost, diagnosticOptions),
+        3_000
+      ),
+      createMeetupConnector(browserHost, diagnosticOptions),
+      withSearchDelay(
+        createEventbriteConnector(browserHost, diagnosticOptions),
+        6_000
+      ),
       createGuildConnector()
     ];
   validateConnectorSet(rawConnectors);
+
+  const isolatedConnectors = rawConnectors.map((connector) =>
+    serializeConnectorOperations(
+      withInteractiveConnection(
+        connector,
+        browserHost,
+        connectUrls[connector.source]
+      )
+    )
+  );
 
   let resourcesClosed = false;
   const persistStatus = async (connector: EventConnector): Promise<void> => {
     if (resourcesClosed) return;
     repositories.connectorStatuses.upsert(await connector.getStatus());
   };
-  const connectors = rawConnectors.map((connector) =>
+  const connectors = isolatedConnectors.map((connector) =>
     withStatusPersistence(connector, () => persistStatus(connector))
   );
 
@@ -112,9 +132,12 @@ export function createProductionDependencies(
       return statuses;
     },
     connect: async (source) => {
-      if (!registry.has(source)) throw new Error("Unknown connector source");
-      await browserHost.pageFor(source, connectUrls[source]);
-      await persistStatus(registry.get(source)!);
+      const connector = registry.get(source);
+      if (!connector) throw new Error("Unknown connector source");
+      for await (const _message of connector.connect()) {
+        // Opening and status updates happen inside the serialized operation.
+      }
+      await persistStatus(connector);
     }
   };
 
@@ -131,6 +154,93 @@ export function createProductionDependencies(
       await browserHost.close();
       database.close();
     }
+  };
+}
+
+function withInteractiveConnection(
+  connector: EventConnector,
+  browserHost: ServerBrowserHost,
+  connectUrl: string
+): EventConnector {
+  return {
+    source: connector.source,
+    getStatus: () => connector.getStatus(),
+    connect: async function* () {
+      await browserHost.closeSource(connector.source);
+      await browserHost.pageFor(connector.source, connectUrl);
+      yield* connector.connect();
+    },
+    search: (query, signal) => connector.search(query, signal)
+  };
+}
+
+function withSearchDelay(
+  connector: EventConnector,
+  delayMs: number
+): EventConnector {
+  return {
+    source: connector.source,
+    getStatus: () => connector.getStatus(),
+    connect: () => connector.connect(),
+    search: async function* (query, signal) {
+      if (!(await abortableDelay(delayMs, signal))) return;
+      yield* connector.search(query, signal);
+    }
+  };
+}
+
+async function abortableDelay(
+  delayMs: number,
+  signal: AbortSignal
+): Promise<boolean> {
+  if (signal.aborted) return false;
+  return new Promise<boolean>((resolveDelay) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolveDelay(true);
+    }, delayMs);
+    const abort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", abort);
+      resolveDelay(false);
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+  });
+}
+
+/** Prevents one source's persistent page from serving overlapping operations. */
+export function serializeConnectorOperations(
+  connector: EventConnector
+): EventConnector {
+  let tail = Promise.resolve();
+
+  const serialized = (
+    create: () => AsyncIterable<ConnectorMessage>,
+    signal?: AbortSignal
+  ): AsyncIterable<ConnectorMessage> => ({
+    async *[Symbol.asyncIterator]() {
+      let release!: () => void;
+      const previous = tail;
+      tail = new Promise<void>((resolveLock) => {
+        release = resolveLock;
+      });
+      await previous;
+      try {
+        if (signal?.aborted) return;
+        yield* create();
+      } finally {
+        release();
+      }
+    }
+  });
+
+  return {
+    source: connector.source,
+    getStatus: () => connector.getStatus(),
+    connect: () => serialized(() => connector.connect()),
+    search: (query, signal) =>
+      serialized(() => connector.search(query, signal), signal)
   };
 }
 

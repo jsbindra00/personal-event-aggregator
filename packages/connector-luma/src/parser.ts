@@ -1,4 +1,4 @@
-import type { RawSourceEvent } from "@event-agg/core";
+import { canonicalizeEventUrl, type RawSourceEvent } from "@event-agg/core";
 import { z } from "zod";
 
 const priceSchema = z
@@ -134,7 +134,7 @@ function canonicalEventUrl(value: string): string {
   if (url.hostname !== "luma.com" && url.hostname !== "lu.ma") {
     throw new LumaPayloadError();
   }
-  return url.href;
+  return canonicalizeEventUrl(url.href);
 }
 
 function assertTimestamp(value: string): void {

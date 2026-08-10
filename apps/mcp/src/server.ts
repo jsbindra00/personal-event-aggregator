@@ -243,15 +243,22 @@ export function buildEventMcpServer(
     },
     async (input, extra) => {
       const { searchId } = await dependencies.searchService.start(input);
+      const cancel = () => dependencies.searchService.cancel(searchId);
+      extra.signal.addEventListener("abort", cancel, { once: true });
       let step = 0;
-      await progress(extra, step, "Search started");
-      for await (const message of dependencies.searchService.subscribe(searchId)) {
-        step += 1;
-        const messageText =
-          message.type === "search.completed"
-            ? "Search complete"
-            : message.type.replaceAll(".", " ");
-        await progress(extra, step, messageText);
+      try {
+        await progress(extra, step, "Search started");
+        for await (const message of dependencies.searchService.subscribe(searchId)) {
+          step += 1;
+          const messageText =
+            message.type === "search.completed"
+              ? "Search complete"
+              : message.type.replaceAll(".", " ");
+          await progress(extra, step, messageText);
+        }
+      } finally {
+        extra.signal.removeEventListener("abort", cancel);
+        if (extra.signal.aborted) cancel();
       }
       const snapshot = dependencies.searchService.snapshot(searchId);
       if (!snapshot) throw new Error("Event search not found");

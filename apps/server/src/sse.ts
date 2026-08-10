@@ -11,16 +11,34 @@ export async function pipeSse(
   messages: AsyncIterable<SearchStreamMessage>,
   output: Writable
 ): Promise<void> {
+  const iterator = messages[Symbol.asyncIterator]();
+  const disconnected = Symbol("disconnected");
+  let resolveDisconnect!: (value: typeof disconnected) => void;
+  const disconnect = new Promise<typeof disconnected>((resolve) => {
+    resolveDisconnect = resolve;
+  });
+  const onDisconnect = () => resolveDisconnect(disconnected);
+  output.once("close", onDisconnect);
+  output.once("error", onDisconnect);
+
   try {
-    for await (const message of messages) {
-      if (!output.write(serializeSseMessage(message))) {
-        await once(output, "drain");
+    while (!output.destroyed) {
+      const next = iterator.next().then((result) => ({ result }));
+      const outcome = await Promise.race([next, disconnect]);
+      if (outcome === disconnected || outcome.result.done) break;
+
+      if (!output.write(serializeSseMessage(outcome.result.value))) {
+        const drained = await Promise.race([once(output, "drain"), disconnect]);
+        if (drained === disconnected) break;
       }
     }
   } finally {
-    if (!output.writableEnded) {
+    output.off("close", onDisconnect);
+    output.off("error", onDisconnect);
+    const returned = iterator.return?.();
+    if (returned) void returned.catch(() => undefined);
+    if (!output.destroyed && !output.writableEnded) {
       output.end();
     }
   }
 }
-

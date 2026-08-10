@@ -5,8 +5,10 @@ import {
 } from "@event-agg/browser";
 import {
   ConnectorFailure,
+  classifyConnectorError,
   withConnectorRetry
 } from "@event-agg/connector-common";
+import { redactDiagnostic } from "@event-agg/core";
 import type {
   ConnectorMessage,
   ConnectorStatus,
@@ -30,6 +32,7 @@ export interface LumaConnectorOptions {
   maxPages?: number;
   observeJson?: typeof observeJsonResponses;
   scrollForNextPage?: (page: Page) => Promise<void>;
+  diagnostic?: (value: unknown) => void;
 }
 
 export function createLumaConnector(
@@ -46,6 +49,7 @@ class LumaConnector implements EventConnector {
   private readonly maxPages: number;
   private readonly observeJson: typeof observeJsonResponses;
   private readonly scrollForNextPage: (page: Page) => Promise<void>;
+  private readonly diagnostic: (value: unknown) => void;
   private status: ConnectorStatus = {
     source: "luma",
     state: "ready",
@@ -62,6 +66,7 @@ class LumaConnector implements EventConnector {
     this.maxPages = Math.max(1, options.maxPages ?? 12);
     this.observeJson = options.observeJson ?? observeJsonResponses;
     this.scrollForNextPage = options.scrollForNextPage ?? defaultScroll;
+    this.diagnostic = options.diagnostic ?? (() => undefined);
   }
 
   async getStatus(): Promise<ConnectorStatus> {
@@ -144,22 +149,30 @@ class LumaConnector implements EventConnector {
       yield { type: "complete", source: "luma", count };
     } catch (error) {
       if (signal.aborted) return;
+      this.diagnostic(
+        redactDiagnostic({ source: "luma", event: "connector.error", error })
+      );
       yield this.failureMessage(error);
     }
   }
 
   private capture(page: Page, action: () => Promise<unknown>): Promise<unknown[]> {
     return withConnectorRetry(
-      () =>
-        this.observeJson(
-          page,
-          {
-            allowedHosts: this.contract.allowedHosts,
-            maxBodyBytes: 2_000_000,
-            responseMatches: this.contract.responseMatches
-          },
-          action
-        ),
+      async () => {
+        try {
+          return await this.observeJson(
+            page,
+            {
+              allowedHosts: this.contract.allowedHosts,
+              maxBodyBytes: 2_000_000,
+              responseMatches: this.contract.responseMatches
+            },
+            action
+          );
+        } catch (error) {
+          throw classifyConnectorError(error);
+        }
+      },
       { maxAttempts: 3 }
     );
   }
@@ -199,6 +212,18 @@ class LumaConnector implements EventConnector {
           ...(error.retryAfterMs === null
             ? {}
             : { retryAfterMs: error.retryAfterMs }),
+          safeMessage: error.message
+        };
+      }
+      if (error.code === "network") {
+        this.setStatus("failed", {
+          errorCode: error.code,
+          safeMessage: error.message
+        });
+        return {
+          type: "failed",
+          source: "luma",
+          errorCode: error.code,
           safeMessage: error.message
         };
       }

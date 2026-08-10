@@ -4,7 +4,7 @@ import { AsyncQueue } from "./async-queue.js";
 import { areProbableDuplicates, mergeDuplicate } from "./dedupe.js";
 import { normalizeEvent } from "./normalize.js";
 import { resolveSearchQuery } from "./query.js";
-import { rankEvent, sortRankedEvents } from "./rank.js";
+import { isEventExcluded, rankEvent, sortRankedEvents } from "./rank.js";
 import type {
   ConnectorMessage,
   ConnectorState,
@@ -69,6 +69,7 @@ interface SearchRun {
   subscribers: Set<AsyncQueue<SearchStreamMessage>>;
   sources: Map<EventSource, SourceRun>;
   events: Map<string, NormalizedEvent>;
+  interests: InterestProfile;
   finalized: boolean;
 }
 
@@ -109,6 +110,7 @@ class DefaultSearchService implements SearchService {
 
   public async start(input: EventSearchQuery): Promise<{ searchId: string }> {
     const query = resolveSearchQuery(input);
+    const currentInterests = this.getInterests();
     const searchId = this.createId();
     const createdAt = this.now().toISOString();
     const run: SearchRun = {
@@ -120,6 +122,11 @@ class DefaultSearchService implements SearchService {
       subscribers: new Set(),
       sources: new Map(),
       events: new Map(),
+      interests: {
+        positive: [...currentInterests.positive],
+        excluded: [...currentInterests.excluded],
+        note: currentInterests.note
+      },
       finalized: false
     };
 
@@ -342,10 +349,9 @@ class DefaultSearchService implements SearchService {
   ): boolean {
     let event: NormalizedEvent;
     try {
-      event = rankEvent(
-        normalizeEvent(message.event, { now: this.now }),
-        this.getInterests()
-      );
+      const normalized = normalizeEvent(message.event, { now: this.now });
+      if (isEventExcluded(normalized, run.interests)) return false;
+      event = rankEvent(normalized, run.interests);
     } catch {
       this.finishSource(
         run,
@@ -375,7 +381,7 @@ class DefaultSearchService implements SearchService {
       const enriched = mergeDuplicate(duplicate, event);
       const merged = rankEvent(
         { ...enriched, id: duplicate.id },
-        this.getInterests()
+        run.interests
       );
       run.events.delete(duplicate.id);
       run.events.set(merged.id, merged);

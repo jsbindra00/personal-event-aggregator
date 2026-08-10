@@ -3,7 +3,12 @@ import {
   type BrowserHost,
   type ObservedSearchContract
 } from "@event-agg/browser";
-import { withConnectorRetry } from "@event-agg/connector-common";
+import {
+  ConnectorFailure,
+  classifyConnectorError,
+  withConnectorRetry
+} from "@event-agg/connector-common";
+import { redactDiagnostic } from "@event-agg/core";
 import type {
   ConnectorMessage,
   ConnectorStatus,
@@ -31,6 +36,7 @@ export interface MeetupConnectorOptions {
   maxPages?: number;
   observeJson?: typeof observeJsonResponses;
   scrollForNextPage?: (page: Page) => Promise<void>;
+  diagnostic?: (value: unknown) => void;
 }
 
 export function createMeetupConnector(
@@ -47,6 +53,7 @@ class MeetupConnector implements EventConnector {
   private readonly maxPages: number;
   private readonly observeJson: typeof observeJsonResponses;
   private readonly scrollForNextPage: (page: Page) => Promise<void>;
+  private readonly diagnostic: (value: unknown) => void;
   private status: ConnectorStatus = {
     source: "meetup",
     state: "ready",
@@ -63,6 +70,7 @@ class MeetupConnector implements EventConnector {
     this.maxPages = Math.max(1, options.maxPages ?? 12);
     this.observeJson = options.observeJson ?? observeJsonResponses;
     this.scrollForNextPage = options.scrollForNextPage ?? defaultScroll;
+    this.diagnostic = options.diagnostic ?? (() => undefined);
   }
 
   async getStatus(): Promise<ConnectorStatus> {
@@ -155,6 +163,9 @@ class MeetupConnector implements EventConnector {
       yield { type: "complete", source: "meetup", count };
     } catch (error) {
       if (signal.aborted) return;
+      this.diagnostic(
+        redactDiagnostic({ source: "meetup", event: "connector.error", error })
+      );
       if (
         error instanceof Error &&
         error.message === "meetup_login_required"
@@ -170,6 +181,60 @@ class MeetupConnector implements EventConnector {
         };
         return;
       }
+      if (error instanceof ConnectorFailure) {
+        if (error.code === "auth_required") {
+          this.setStatus("auth_required", {
+            errorCode: error.code,
+            safeMessage: error.message
+          });
+          yield {
+            type: "auth_required",
+            source: "meetup",
+            safeMessage: error.message
+          };
+          return;
+        }
+        if (error.code === "user_action_required") {
+          this.setStatus("user_action_required", {
+            errorCode: error.code,
+            safeMessage: error.message
+          });
+          yield {
+            type: "user_action_required",
+            source: "meetup",
+            safeMessage: error.message
+          };
+          return;
+        }
+        if (error.code === "rate_limited") {
+          this.setStatus("rate_limited", {
+            errorCode: error.code,
+            safeMessage: error.message
+          });
+          yield {
+            type: "rate_limited",
+            source: "meetup",
+            ...(error.retryAfterMs === null
+              ? {}
+              : { retryAfterMs: error.retryAfterMs }),
+            safeMessage: error.message
+          };
+          return;
+        }
+        if (error.code === "network") {
+          this.setStatus("failed", {
+            errorCode: error.code,
+            safeMessage: error.message
+          });
+          yield {
+            type: "failed",
+            source: "meetup",
+            errorCode: error.code,
+            safeMessage: error.message
+          };
+          return;
+        }
+      }
       const isContractDrift = error instanceof MeetupPayloadError;
       const errorCode = isContractDrift
         ? "contract_drift"
@@ -184,16 +249,21 @@ class MeetupConnector implements EventConnector {
 
   private capture(page: Page, action: () => Promise<unknown>): Promise<unknown[]> {
     return withConnectorRetry(
-      () =>
-        this.observeJson(
-          page,
-          {
-            allowedHosts: this.contract.allowedHosts,
-            maxBodyBytes: 2_000_000,
-            responseMatches: this.contract.responseMatches
-          },
-          action
-        ),
+      async () => {
+        try {
+          return await this.observeJson(
+            page,
+            {
+              allowedHosts: this.contract.allowedHosts,
+              maxBodyBytes: 2_000_000,
+              responseMatches: this.contract.responseMatches
+            },
+            action
+          );
+        } catch (error) {
+          throw classifyConnectorError(error);
+        }
+      },
       { maxAttempts: 3 }
     );
   }

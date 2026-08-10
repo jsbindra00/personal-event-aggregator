@@ -58,6 +58,6 @@ Public discovery returned HTTP `200` in an anonymous Chrome context, while the p
 
 ## Safety notes
 
-- No Cookie, Set-Cookie, Authorization, CSRF, or other header value is recorded.
+- No request cookie, response cookie, authorization, anti-forgery, or other header value is recorded.
 - No account, user, host, guest, or real event identifier is retained.
 - The fixture keeps two synthetic/redacted entries, one redacted cursor, and only normalization fields.

@@ -93,7 +93,12 @@ function mapEvent(item: z.infer<typeof eventSchema>): RawSourceEvent {
 
   const canonicalUrl = canonicalizeEventUrl(item.url).replace(/\/$/, "");
   const hostname = new URL(canonicalUrl).hostname;
-  if (!/(^|\.)eventbrite\.[a-z.]+$/i.test(hostname)) {
+  const eventbriteDomains = ["eventbrite.com", "eventbrite.co.uk"];
+  if (
+    !eventbriteDomains.some(
+      (domain) => hostname === domain || hostname.endsWith(`.${domain}`)
+    )
+  ) {
     throw new EventbritePayloadError();
   }
   const idMatch = new URL(canonicalUrl).pathname.match(/-(\d+)\/?$/);

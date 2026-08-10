@@ -1,6 +1,6 @@
 import { PassThrough } from "node:stream";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { pipeSse, serializeSseMessage } from "../src/sse.js";
 import type { SearchStreamMessage } from "../../../packages/core/src/types.js";
@@ -37,5 +37,23 @@ describe("pipeSse", () => {
     expect(body).toContain("id: 7\nevent: search.started");
     expect(body).toContain("id: 8\nevent: search.completed");
     expect(output.writableEnded).toBe(true);
+  });
+
+  it("unsubscribes promptly when the client disconnects", async () => {
+    const iterator = {
+      next: vi.fn(() => new Promise<IteratorResult<SearchStreamMessage>>(() => undefined)),
+      return: vi.fn(async () => ({ done: true as const, value: undefined }))
+    };
+    const messages = {
+      [Symbol.asyncIterator]: () => iterator
+    };
+    const output = new PassThrough();
+
+    const piping = pipeSse(messages, output);
+    await Promise.resolve();
+    output.destroy();
+    await piping;
+
+    expect(iterator.return).toHaveBeenCalledOnce();
   });
 });

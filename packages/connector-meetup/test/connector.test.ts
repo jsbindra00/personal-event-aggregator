@@ -114,4 +114,31 @@ describe("createMeetupConnector", () => {
       safeMessage: "Meetup's event response changed"
     });
   });
+
+  it("preserves streamed events but reports failed pagination", async () => {
+    let observation = 0;
+    const connector = createMeetupConnector(
+      { pageFor: async () => fakePage },
+      {
+        maxPages: 2,
+        observeJson: async () => {
+          observation += 1;
+          if (observation === 1) return [fixture];
+          throw new Error("pagination timed out");
+        },
+        scrollForNextPage: async () => undefined
+      }
+    );
+
+    const messages = await collect(
+      connector.search(query, new AbortController().signal)
+    );
+    expect(messages.map(({ type }) => type)).toEqual([
+      "progress",
+      "event",
+      "event",
+      "failed"
+    ]);
+    expect(messages.at(-1)).toMatchObject({ errorCode: "connector_exception" });
+  });
 });

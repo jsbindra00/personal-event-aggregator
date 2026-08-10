@@ -29,7 +29,15 @@ export function useEventSearch(api: EventApi) {
     closeStreamRef.current = null;
   }, []);
 
-  useEffect(() => closeStream, [closeStream]);
+  useEffect(
+    () => () => {
+      closeStream();
+      const searchId = searchIdRef.current;
+      searchIdRef.current = null;
+      if (searchId) void api.cancelSearch(searchId);
+    },
+    [api, closeStream]
+  );
 
   const onMessage = useCallback(
     (message: SearchStreamMessage) => {
@@ -47,6 +55,7 @@ export function useEventSearch(api: EventApi) {
         }));
       }
       if (message.type === "search.completed") {
+        searchIdRef.current = null;
         setPhase("complete");
         closeStream();
       }
@@ -56,7 +65,10 @@ export function useEventSearch(api: EventApi) {
 
   const start = useCallback(
     async (query: EventSearchQuery) => {
+      const previousSearchId = searchIdRef.current;
+      searchIdRef.current = null;
       closeStream();
+      if (previousSearchId) await api.cancelSearch(previousSearchId);
       setEventMap(new Map());
       setSourceStatuses({});
       setError(null);
@@ -78,6 +90,7 @@ export function useEventSearch(api: EventApi) {
 
   const stop = useCallback(async () => {
     const searchId = searchIdRef.current;
+    searchIdRef.current = null;
     closeStream();
     if (searchId) {
       await api.cancelSearch(searchId);
@@ -98,4 +111,3 @@ export function useEventSearch(api: EventApi) {
 
   return { events, sourceStatuses, phase, error, start, stop };
 }
-

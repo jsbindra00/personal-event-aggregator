@@ -100,4 +100,30 @@ describe("createLumaConnector", () => {
       safeMessage: "Luma's event response changed"
     });
   });
+
+  it("preserves streamed events but reports failed pagination", async () => {
+    let observation = 0;
+    const connector = createLumaConnector(
+      { pageFor: async () => fakePage },
+      {
+        maxPages: 2,
+        observeJson: async () => {
+          observation += 1;
+          return observation === 1 ? [fixture] : [];
+        },
+        scrollForNextPage: async () => undefined
+      }
+    );
+
+    const messages = await collect(
+      connector.search(query, new AbortController().signal)
+    );
+    expect(messages.map(({ type }) => type)).toEqual([
+      "progress",
+      "event",
+      "event",
+      "failed"
+    ]);
+    expect(messages.at(-1)).toMatchObject({ errorCode: "contract_drift" });
+  });
 });

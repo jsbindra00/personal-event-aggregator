@@ -13,6 +13,7 @@ export interface TestEventApi extends EventApi {
   connectedSources: EventSource[];
   connectorStatuses: ConnectorStatus[];
   searches: EventSearchQuery[];
+  cancelledSearches: string[];
 }
 
 export function createTestEventApi(): TestEventApi {
@@ -33,9 +34,11 @@ export function createTestEventApi(): TestEventApi {
   ];
   const searches: EventSearchQuery[] = [];
   const connectedSources: EventSource[] = [];
+  const cancelledSearches: string[] = [];
 
   return {
     searches,
+    cancelledSearches,
     connectedSources,
     connectorStatuses: statuses,
     getInterests: async () => interests,
@@ -49,12 +52,15 @@ export function createTestEventApi(): TestEventApi {
     },
     startSearch: async (query) => {
       searches.push(query);
+      const searchId = `search-${searches.length}`;
       return {
-        searchId: "search-1",
-        streamUrl: "/api/searches/search-1/stream"
+        searchId,
+        streamUrl: `/api/searches/${searchId}/stream`
       };
     },
-    cancelSearch: async () => undefined,
+    cancelSearch: async (searchId) => {
+      cancelledSearches.push(searchId);
+    },
     openSearchStream: (_url, onMessage) => {
       listener = onMessage;
       return () => {

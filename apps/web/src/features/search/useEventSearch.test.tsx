@@ -65,4 +65,21 @@ describe("useEventSearch", () => {
       "Detailed description"
     );
   });
+
+  it("cancels an active search before starting its replacement", async () => {
+    const api = createTestEventApi();
+    const { result } = renderHook(() => useEventSearch(api));
+    const query = {
+      locationText: "London",
+      startDate: "2026-08-10",
+      endDate: "2026-08-12",
+      timeZone: "Europe/London"
+    };
+
+    await act(() => result.current.start(query));
+    await act(() => result.current.start({ ...query, locationText: "Paris" }));
+
+    expect(api.cancelledSearches).toEqual(["search-1"]);
+    expect(api.searches).toHaveLength(2);
+  });
 });

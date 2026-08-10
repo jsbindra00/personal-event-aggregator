@@ -2,7 +2,12 @@ import type {
   BrowserHost,
   ObservedSearchContract
 } from "@event-agg/browser";
-import { ConnectorFailure } from "@event-agg/connector-common";
+import {
+  ConnectorFailure,
+  classifyConnectorError,
+  withConnectorRetry
+} from "@event-agg/connector-common";
+import { redactDiagnostic } from "@event-agg/core";
 import type {
   ConnectorMessage,
   ConnectorStatus,
@@ -32,6 +37,7 @@ export interface EventbriteConnectorOptions {
     query: ResolvedSearchQuery,
     contract: ObservedSearchContract
   ) => Promise<unknown>;
+  diagnostic?: (value: unknown) => void;
 }
 
 export function createEventbriteConnector(
@@ -48,6 +54,7 @@ class EventbriteConnector implements EventConnector {
   private readonly readPayload: NonNullable<
     EventbriteConnectorOptions["readPayload"]
   >;
+  private readonly diagnostic: (value: unknown) => void;
   private status: ConnectorStatus = {
     source: "eventbrite",
     state: "ready",
@@ -62,6 +69,7 @@ class EventbriteConnector implements EventConnector {
   ) {
     this.contract = options.contract ?? eventbriteSearchContract;
     this.readPayload = options.readPayload ?? defaultReadPayload;
+    this.diagnostic = options.diagnostic ?? (() => undefined);
   }
 
   async getStatus(): Promise<ConnectorStatus> {
@@ -93,7 +101,13 @@ class EventbriteConnector implements EventConnector {
         this.contract.connectUrl
       );
       await enforceReadOnlyEventbritePage(page);
-      const payload = await this.readPayload(page, query, this.contract);
+      const payload = await withConnectorRetry(async () => {
+        try {
+          return await this.readPayload(page, query, this.contract);
+        } catch (error) {
+          throw classifyConnectorError(error);
+        }
+      });
       signal.throwIfAborted();
       const events = parseEventbriteSearchPayload(payload);
       let count = 0;
@@ -112,6 +126,13 @@ class EventbriteConnector implements EventConnector {
       yield { type: "complete", source: "eventbrite", count };
     } catch (error) {
       if (signal.aborted) return;
+      this.diagnostic(
+        redactDiagnostic({
+          source: "eventbrite",
+          event: "connector.error",
+          error
+        })
+      );
       if (error instanceof ConnectorFailure) {
         if (error.code === "auth_required") {
           this.setStatus("auth_required", {
@@ -133,6 +154,34 @@ class EventbriteConnector implements EventConnector {
           yield {
             type: "user_action_required",
             source: "eventbrite",
+            safeMessage: error.message
+          };
+          return;
+        }
+        if (error.code === "rate_limited") {
+          this.setStatus("rate_limited", {
+            errorCode: error.code,
+            safeMessage: error.message
+          });
+          yield {
+            type: "rate_limited",
+            source: "eventbrite",
+            ...(error.retryAfterMs === null
+              ? {}
+              : { retryAfterMs: error.retryAfterMs }),
+            safeMessage: error.message
+          };
+          return;
+        }
+        if (error.code === "network") {
+          this.setStatus("failed", {
+            errorCode: error.code,
+            safeMessage: error.message
+          });
+          yield {
+            type: "failed",
+            source: "eventbrite",
+            errorCode: error.code,
             safeMessage: error.message
           };
           return;

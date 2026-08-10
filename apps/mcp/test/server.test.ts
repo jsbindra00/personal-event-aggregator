@@ -1,6 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ConnectorStatus,
@@ -65,7 +65,10 @@ const query: EventSearchQuery = {
 
 class FakeSearchService implements SearchService {
   public readonly inputs: EventSearchQuery[] = [];
+  public readonly cancelled: string[] = [];
+  public hang = false;
   private readonly snapshots = new Map<string, SearchSnapshot>();
+  private readonly releases = new Map<string, () => void>();
   private sequence = 0;
 
   public async start(input: EventSearchQuery): Promise<{ searchId: string }> {
@@ -108,6 +111,22 @@ class FakeSearchService implements SearchService {
         sources: statuses
       });
     };
+    if (this.hang) {
+      const releases = this.releases;
+      return {
+        [Symbol.asyncIterator]() {
+          return {
+            next: () =>
+              new Promise<IteratorResult<SearchStreamMessage>>((resolve) => {
+                releases.set(searchId, () =>
+                  resolve({ done: true, value: undefined })
+                );
+              }),
+            return: async () => ({ done: true, value: undefined })
+          };
+        }
+      };
+    }
     return {
       async *[Symbol.asyncIterator]() {
         for (const message of messages) yield message;
@@ -132,6 +151,9 @@ class FakeSearchService implements SearchService {
   }
 
   public cancel(searchId: string): void {
+    this.cancelled.push(searchId);
+    this.releases.get(searchId)?.();
+    this.releases.delete(searchId);
     const snapshot = this.snapshots.get(searchId);
     if (snapshot) this.snapshots.set(searchId, { ...snapshot, status: "cancelled" });
   }
@@ -273,5 +295,24 @@ describe("event aggregator MCP server", () => {
     );
     expect(progress.length).toBeGreaterThan(0);
     expect(progress.at(-1)).toMatchObject({ message: "Search complete" });
+  });
+
+  it("cancels the underlying search when a synchronous tool call is aborted", async () => {
+    const { client, searchService } = await fixture();
+    searchService.hang = true;
+    const controller = new AbortController();
+
+    const call = client.callTool(
+      { name: "search_events", arguments: { ...query } },
+      undefined,
+      { signal: controller.signal }
+    );
+    await vi.waitFor(() => expect(searchService.inputs).toHaveLength(1));
+    controller.abort();
+
+    await expect(call).rejects.toThrow();
+    await vi.waitFor(() =>
+      expect(searchService.cancelled).toContain("search-1")
+    );
   });
 });

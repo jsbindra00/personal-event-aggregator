@@ -48,6 +48,18 @@ function optionalHttpUrl(value: string | null | undefined): string | null {
   }
 }
 
+function normalizeTimeZone(value: string | null | undefined): string | null {
+  const cleaned = cleanText(value);
+  if (!cleaned) return null;
+
+  try {
+    return new Intl.DateTimeFormat("en", { timeZone: cleaned }).resolvedOptions()
+      .timeZone;
+  } catch {
+    return null;
+  }
+}
+
 function stableEventId(source: string, sourceId: string | null, url: string): string {
   if (sourceId) {
     return `${source}:${sourceId}`;
@@ -90,7 +102,7 @@ export function normalizeEvent(
     title,
     startsAt,
     endsAt: normalizeTimestamp(raw.endsAt, "end"),
-    timeZone: cleanText(raw.timeZone),
+    timeZone: normalizeTimeZone(raw.timeZone),
     descriptionText,
     organizerName: cleanText(raw.organizerName),
     venueName: cleanText(raw.venueName),
@@ -106,4 +118,3 @@ export function normalizeEvent(
     firstSeenAt: (options.now ?? (() => new Date()))().toISOString()
   };
 }
-

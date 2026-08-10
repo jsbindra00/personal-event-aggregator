@@ -8,4 +8,7 @@ work/
 .env.*
 *.har
 *.unredacted.*
+*.storage-state.json
+*.trace.zip
+playwright-report/
 .DS_Store

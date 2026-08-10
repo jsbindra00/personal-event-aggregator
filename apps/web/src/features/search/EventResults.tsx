@@ -6,11 +6,21 @@ interface EventResultsProps {
 }
 
 function formatDate(event: NormalizedEvent): string {
-  return new Intl.DateTimeFormat(undefined, {
+  const options: Intl.DateTimeFormatOptions = {
     dateStyle: "medium",
     timeStyle: "short",
     ...(event.timeZone ? { timeZone: event.timeZone } : {})
-  }).format(new Date(event.startsAt));
+  };
+  try {
+    return new Intl.DateTimeFormat(undefined, options).format(
+      new Date(event.startsAt)
+    );
+  } catch {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }).format(new Date(event.startsAt));
+  }
 }
 
 export function EventResults({ events, searching }: EventResultsProps) {
@@ -53,4 +63,3 @@ export function EventResults({ events, searching }: EventResultsProps) {
     </div>
   );
 }
-

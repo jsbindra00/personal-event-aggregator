@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  classifyConnectorError,
   connectorFailure,
   withConnectorRetry
 } from "../src/retry.js";
@@ -63,5 +64,20 @@ describe("withConnectorRetry", () => {
       })
     ).rejects.toMatchObject({ code });
     expect(attempts).toBe(1);
+  });
+
+  it("classifies HTTP outcomes and browser timeouts for safe retry handling", () => {
+    expect(
+      classifyConnectorError({
+        name: "ObservedHttpError",
+        status: 429,
+        retryAfterMs: 2_000
+      })
+    ).toMatchObject({ code: "rate_limited", retryAfterMs: 2_000 });
+    expect(
+      classifyConnectorError(Object.assign(new Error("page timed out"), {
+        name: "TimeoutError"
+      }))
+    ).toMatchObject({ code: "network" });
   });
 });

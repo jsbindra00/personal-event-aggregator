@@ -65,4 +65,16 @@ describe("parseEventbriteSearchPayload", () => {
       EventbritePayloadError
     );
   });
+
+  it("rejects lookalike Eventbrite domains", () => {
+    const fixture = loadFixture() as {
+      itemListElement: Array<{ item: { url: string } }>;
+    };
+    fixture.itemListElement[0]!.item.url =
+      "https://eventbrite.evil.com/e/fake-tickets-123";
+
+    expect(() => parseEventbriteSearchPayload(fixture)).toThrowError(
+      EventbritePayloadError
+    );
+  });
 });
