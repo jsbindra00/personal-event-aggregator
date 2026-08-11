@@ -1,0 +1,122 @@
+{
+  "edges": [
+    {
+      "cursor": "fixture-edge-1",
+      "node": {
+        "id": "fixture-guild-event-1",
+        "slug": "fixture01",
+        "prettyUrl": "birmingham-ai-builders-fixture01",
+        "fullUrl": "https://guild.host/events/birmingham-ai-builders-fixture01",
+        "shortUrl": "https://guild.host/e-fixture01",
+        "name": "Birmingham AI Builders",
+        "description": "A synthetic evening for engineers building AI products.",
+        "startAt": "2026-08-12T18:00:00+00:00",
+        "endAt": "2026-08-12T20:00:00+00:00",
+        "timeZone": "Europe/London",
+        "visibility": "LISTED",
+        "hasVenue": true,
+        "hasExternalUrl": false,
+        "owner": {
+          "__typename": "Guild",
+          "id": "fixture-guild-owner-1",
+          "name": "Birmingham Builders Guild"
+        },
+        "venue": {
+          "address": {
+            "location": {
+              "geojson": {
+                "type": "Point",
+                "coordinates": [-1.8904, 52.4862]
+              }
+            }
+          }
+        },
+        "uploadedSocialCard": null,
+        "generatedSocialCardURL": "https://guild.host/social/event/birmingham-ai-builders-fixture01/card.svg",
+        "presentations": {
+          "edges": []
+        },
+        "createdAt": "2026-07-01T12:00:00.000Z",
+        "updatedAt": "2026-07-02T12:00:00.000Z"
+      }
+    },
+    {
+      "cursor": "fixture-edge-2",
+      "node": {
+        "id": "fixture-guild-event-2",
+        "slug": "fixture02",
+        "prettyUrl": "distant-product-social-fixture02",
+        "fullUrl": "https://guild.host/events/distant-product-social-fixture02",
+        "shortUrl": "https://guild.host/e-fixture02",
+        "name": "Distant Product Social",
+        "description": "A synthetic in-person product gathering outside the configured radius.",
+        "startAt": "2026-08-12T19:00:00+00:00",
+        "endAt": "2026-08-12T21:00:00+00:00",
+        "timeZone": "Europe/London",
+        "visibility": "LISTED",
+        "hasVenue": true,
+        "hasExternalUrl": false,
+        "owner": {
+          "__typename": "Guild",
+          "id": "fixture-guild-owner-2",
+          "name": "Distant Product Guild"
+        },
+        "venue": {
+          "address": {
+            "location": {
+              "geojson": {
+                "type": "Point",
+                "coordinates": [-2.2426, 53.4808]
+              }
+            }
+          }
+        },
+        "uploadedSocialCard": null,
+        "generatedSocialCardURL": "https://guild.host/social/event/distant-product-social-fixture02/card.svg",
+        "presentations": {
+          "edges": []
+        },
+        "createdAt": "2026-07-01T12:00:00.000Z",
+        "updatedAt": null
+      }
+    },
+    {
+      "cursor": "fixture-edge-3",
+      "node": {
+        "id": "fixture-guild-event-3",
+        "slug": "fixture03",
+        "prettyUrl": "worldwide-agent-engineering-fixture03",
+        "fullUrl": "https://guild.host/events/worldwide-agent-engineering-fixture03",
+        "shortUrl": "https://guild.host/e-fixture03",
+        "name": "Worldwide Agent Engineering",
+        "description": "A synthetic online session about production agent systems.",
+        "startAt": "2026-08-13T18:00:00+00:00",
+        "endAt": "2026-08-13T19:00:00+00:00",
+        "timeZone": "Etc/UTC",
+        "visibility": "LISTED",
+        "hasVenue": false,
+        "hasExternalUrl": true,
+        "owner": {
+          "__typename": "User",
+          "id": "fixture-user-owner-1",
+          "firstName": "Ada",
+          "lastName": "Lovelace"
+        },
+        "venue": null,
+        "uploadedSocialCard": null,
+        "generatedSocialCardURL": "https://guild.host/social/event/worldwide-agent-engineering-fixture03/card.svg",
+        "presentations": {
+          "edges": []
+        },
+        "createdAt": "2026-07-01T12:00:00.000Z",
+        "updatedAt": "2026-07-03T12:00:00.000Z"
+      }
+    }
+  ],
+  "pageInfo": {
+    "hasPreviousPage": false,
+    "hasNextPage": true,
+    "startCursor": "fixture-edge-1",
+    "endCursor": "fixture-cursor-1"
+  }
+}

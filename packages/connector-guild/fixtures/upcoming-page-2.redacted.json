@@ -1,0 +1,73 @@
+{
+  "edges": [
+    {
+      "cursor": "fixture-edge-4",
+      "node": {
+        "id": "fixture-guild-event-3",
+        "slug": "fixture03",
+        "prettyUrl": "worldwide-agent-engineering-fixture03",
+        "fullUrl": "https://guild.host/events/worldwide-agent-engineering-fixture03",
+        "shortUrl": "https://guild.host/e-fixture03",
+        "name": "Worldwide Agent Engineering",
+        "description": "A synthetic online session about production agent systems.",
+        "startAt": "2026-08-13T18:00:00+00:00",
+        "endAt": "2026-08-13T19:00:00+00:00",
+        "timeZone": "Etc/UTC",
+        "visibility": "LISTED",
+        "hasVenue": false,
+        "hasExternalUrl": true,
+        "owner": {
+          "__typename": "User",
+          "id": "fixture-user-owner-1",
+          "firstName": "Ada",
+          "lastName": "Lovelace"
+        },
+        "venue": null,
+        "uploadedSocialCard": null,
+        "generatedSocialCardURL": "https://guild.host/social/event/worldwide-agent-engineering-fixture03/card.svg",
+        "presentations": {
+          "edges": []
+        },
+        "createdAt": "2026-07-01T12:00:00.000Z",
+        "updatedAt": "2026-07-03T12:00:00.000Z"
+      }
+    },
+    {
+      "cursor": "fixture-edge-5",
+      "node": {
+        "id": "fixture-guild-event-4",
+        "slug": "fixture04",
+        "prettyUrl": "exclusive-end-boundary-fixture04",
+        "fullUrl": "https://guild.host/events/exclusive-end-boundary-fixture04",
+        "shortUrl": "https://guild.host/e-fixture04",
+        "name": "Exclusive End Boundary",
+        "description": "A synthetic event exactly at the query end boundary.",
+        "startAt": "2026-08-13T23:00:00+00:00",
+        "endAt": "2026-08-14T00:00:00+00:00",
+        "timeZone": "Etc/UTC",
+        "visibility": "LISTED",
+        "hasVenue": false,
+        "hasExternalUrl": true,
+        "owner": {
+          "__typename": "Guild",
+          "id": "fixture-guild-owner-4",
+          "name": "Boundary Guild"
+        },
+        "venue": null,
+        "uploadedSocialCard": null,
+        "generatedSocialCardURL": "https://guild.host/social/event/exclusive-end-boundary-fixture04/card.svg",
+        "presentations": {
+          "edges": []
+        },
+        "createdAt": "2026-07-01T12:00:00.000Z",
+        "updatedAt": null
+      }
+    }
+  ],
+  "pageInfo": {
+    "hasPreviousPage": true,
+    "hasNextPage": false,
+    "startCursor": "fixture-edge-4",
+    "endCursor": "fixture-edge-5"
+  }
+}
