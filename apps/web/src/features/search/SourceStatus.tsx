@@ -3,7 +3,7 @@ import type { ConnectorStatus, EventSource } from "@event-agg/core";
 const sourceNames: Record<EventSource, string> = {
   meetup: "Meetup",
   luma: "Luma",
-  guild: "Guild",
+  guild: "Guild.host",
   eventbrite: "Eventbrite"
 };
 
@@ -45,7 +45,7 @@ function actionFor(
   status: ConnectorStatus | undefined
 ): string | null {
   const state = status?.state ?? "disconnected";
-  if (source === "guild" && state === "failed") return "Why unavailable";
+  if (source === "guild") return null;
   if (state === "disconnected") return "Connect";
   if (state === "auth_required") return "Sign in again";
   if (state === "failed" || state === "user_action_required") {

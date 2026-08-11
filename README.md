@@ -2,9 +2,9 @@
 
 A local-first search interface for Meetup, Luma, Eventbrite, and Guild. It accepts a city or street address plus an inclusive date range, ranks results against a saved interest profile, streams events as each source responds, and exposes the same data over HTTP/SSE and MCP.
 
-The source adapters call the websites' read-only first-party private endpoints or rendered page data directly. They do not use official event-platform APIs and never submit credentials through this application. Guild is represented as unavailable because the service closed on 1 October 2024.
+The source adapters call read-only first-party endpoints or rendered page data directly and never submit credentials through this application. Meetup and Luma use private website contracts, Eventbrite uses rendered discovery data, and Guild.host uses its documented anonymous public feed. The Guild.host event service is separate from the unrelated `guild.co` messaging product that closed in 2024.
 
-Specifically, Meetup uses its anonymous persisted GraphQL location and event queries, Luma uses its public place page plus cursor-paginated discovery JSON, and Eventbrite uses the event-list structured data rendered on its city pages. These are private website contracts rather than supported public APIs, so each source is isolated and reports authentication, rate-limit, network, or contract-drift failures without stopping results from the others. Browser automation is retained only as a source-scoped fallback when one of those private contracts drifts, or when you explicitly choose **Connect**.
+Specifically, Meetup uses its anonymous persisted GraphQL location and event queries, Luma uses its public place page plus cursor-paginated discovery JSON, Eventbrite merges structured event data from a fixed set of city and technology/social discovery pages, and Guild.host follows its anonymous upcoming-event cursors. Each source is isolated and reports authentication, rate-limit, network, or contract-drift failures without stopping results from the others. Browser automation is retained only as a source-scoped fallback for Meetup, Luma, or Eventbrite contract drift, or when you explicitly choose **Connect** on a source that supports an interactive session.
 
 ## Requirements
 
@@ -130,7 +130,7 @@ The web server and MCP process share the SQLite format and Chrome profile, but o
 
 ## Live connector checks
 
-Live checks are opt-in because they launch Chrome and read current websites:
+Live checks are opt-in because they read current websites. Luma, Meetup, and Eventbrite retain browser-based smoke checks; Guild.host's smoke check is direct and does not launch Chrome:
 
 ```bash
 LIVE_CONNECTOR_SMOKE=luma pnpm exec vitest run packages/connector-luma/test/live.smoke.test.ts

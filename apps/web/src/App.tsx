@@ -56,7 +56,7 @@ export function App({ api }: AppProps) {
           <p className="eyebrow">Personal event intelligence</p>
           <h1>Find the rooms<br />worth entering.</h1>
           <p className="hero-copy">
-            One search across Meetup, Luma, Guild and Eventbrite—ranked around what you actually care about.
+            One search across Meetup, Luma, Guild.host and Eventbrite—ranked around what you actually care about.
           </p>
         </div>
         <div className="radar-mark" aria-hidden="true"><span /></div>
