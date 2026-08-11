@@ -3,6 +3,7 @@ import {
   connectorFailure,
   requestBoundedText,
   withConnectorRetry,
+  type ConnectorRetryOptions,
   type DirectRequestPolicy
 } from "@event-agg/connector-common";
 import { redactDiagnostic } from "@event-agg/core";
@@ -13,7 +14,11 @@ import type {
   ResolvedSearchQuery
 } from "@event-agg/core";
 
-import { eventbriteSearchUrl } from "./contract.js";
+import {
+  EVENTBRITE_DISCOVERY_INTENTS,
+  eventbriteSearchUrls,
+  type EventbriteDiscoveryIntent
+} from "./contract.js";
 import {
   EventbritePayloadError,
   parseEventbriteSearchHtml,
@@ -28,6 +33,8 @@ export interface DirectEventbriteOptions {
   diagnostic?: (value: unknown) => void;
   maxBodyBytes?: number;
   timeoutMs?: number;
+  discoveryIntents?: readonly EventbriteDiscoveryIntent[];
+  retry?: ConnectorRetryOptions;
 }
 
 export function createDirectEventbriteConnector(
@@ -41,6 +48,8 @@ class DirectEventbriteConnector implements EventConnector {
 
   private readonly fetch: typeof globalThis.fetch;
   private readonly diagnostic: (value: unknown) => void;
+  private readonly discoveryIntents: readonly EventbriteDiscoveryIntent[];
+  private readonly retry: ConnectorRetryOptions;
   private readonly policy: DirectRequestPolicy;
   private status: ConnectorStatus = {
     source: "eventbrite",
@@ -53,11 +62,17 @@ class DirectEventbriteConnector implements EventConnector {
   constructor(options: DirectEventbriteOptions) {
     this.fetch = options.fetch ?? globalThis.fetch;
     this.diagnostic = options.diagnostic ?? (() => undefined);
+    this.discoveryIntents =
+      options.discoveryIntents ?? EVENTBRITE_DISCOVERY_INTENTS;
+    this.retry = options.retry ?? {};
+    const allowedIntents = new Set<string>(this.discoveryIntents);
     this.policy = {
       method: "GET",
       allowedHosts: ["www.eventbrite.co.uk"],
-      allowedPath: (pathname) =>
-        /^\/d\/[^/]+--[^/]+\/events\/$/.test(pathname),
+      allowedPath: (pathname) => {
+        const match = pathname.match(/^\/d\/[^/]+--[^/]+\/([^/]+)\/$/);
+        return match !== null && allowedIntents.has(match[1]!);
+      },
       maxBodyBytes: options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
       timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS
     };
@@ -87,34 +102,65 @@ class DirectEventbriteConnector implements EventConnector {
 
     try {
       signal.throwIfAborted();
-      const url = eventbriteSearchUrl(query.locationText);
-      if (url === null) {
+      const urls = eventbriteSearchUrls(
+        query.locationText,
+        this.discoveryIntents
+      );
+      if (urls === null) {
         throw connectorFailure(
           "user_action_required",
           `Eventbrite needs a supported city for ${query.locationText}`
         );
       }
-      const html = await withConnectorRetry(
-        () =>
-          requestBoundedText(
-            { url, fetch: this.fetch },
-            this.policy,
-            signal
-          ),
-        { signal }
-      );
-      signal.throwIfAborted();
-      const events = parseEventbriteSearchPayload(
-        parseEventbriteSearchHtml(html)
-      );
       const startsAt = Date.parse(query.startsAtUtc);
       const endsBefore = Date.parse(query.endsBeforeUtc);
+      const seenEvents = new Set<string>();
+      const failures: unknown[] = [];
+      let successfulPages = 0;
       let count = 0;
-      for (const event of events) {
-        const eventStart = Date.parse(event.startsAt);
-        if (eventStart < startsAt || eventStart >= endsBefore) continue;
-        count += 1;
-        yield { type: "event", source: "eventbrite", event };
+
+      for (const url of urls) {
+        signal.throwIfAborted();
+        try {
+          const html = await withConnectorRetry(
+            () =>
+              requestBoundedText(
+                { url, fetch: this.fetch },
+                this.policy,
+                signal
+              ),
+            { ...this.retry, signal }
+          );
+          signal.throwIfAborted();
+          const events = parseEventbriteSearchPayload(
+            parseEventbriteSearchHtml(html)
+          );
+          successfulPages += 1;
+          for (const event of events) {
+            const eventStart = Date.parse(event.startsAt);
+            if (eventStart < startsAt || eventStart >= endsBefore) continue;
+            const identity = event.sourceEventId ?? event.canonicalUrl;
+            if (seenEvents.has(identity)) continue;
+            seenEvents.add(identity);
+            count += 1;
+            yield { type: "event", source: "eventbrite", event };
+          }
+        } catch (error) {
+          if (signal.aborted) return;
+          failures.push(error);
+          this.diagnostic(
+            redactDiagnostic({
+              source: "eventbrite",
+              transport: "direct",
+              event: "page.error",
+              error
+            })
+          );
+        }
+      }
+
+      if (successfulPages === 0) {
+        throw representativeFailure(failures);
       }
       this.setStatus("complete", { lastSuccessAt: new Date().toISOString() });
       yield { type: "complete", source: "eventbrite", count };
@@ -209,4 +255,12 @@ class DirectEventbriteConnector implements EventConnector {
       ...patch
     };
   }
+}
+
+function representativeFailure(failures: readonly unknown[]): unknown {
+  return (
+    failures.find((error) => error instanceof ConnectorFailure) ??
+    failures[0] ??
+    new EventbritePayloadError()
+  );
 }
