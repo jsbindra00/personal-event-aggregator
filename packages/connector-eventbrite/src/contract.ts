@@ -5,6 +5,35 @@ import type { Page } from "playwright-core";
 const LONDON_URL =
   "https://www.eventbrite.co.uk/d/united-kingdom--london/events/";
 
+export const EVENTBRITE_DISCOVERY_INTENTS = [
+  "events",
+  "ai",
+  "machine-learning",
+  "startups",
+  "technology",
+  "software",
+  "developer",
+  "product-design",
+  "hackathon",
+  "tech-networking",
+  "business-networking"
+] as const;
+
+export type EventbriteDiscoveryIntent =
+  (typeof EVENTBRITE_DISCOVERY_INTENTS)[number];
+
+const cityRoutes = [
+  { name: "london", country: "united-kingdom", city: "london" },
+  { name: "manchester", country: "united-kingdom", city: "manchester" },
+  { name: "birmingham", country: "united-kingdom", city: "birmingham" },
+  { name: "bristol", country: "united-kingdom", city: "bristol" },
+  { name: "edinburgh", country: "united-kingdom", city: "edinburgh" },
+  { name: "paris", country: "france", city: "paris" },
+  { name: "berlin", country: "germany", city: "berlin" },
+  { name: "amsterdam", country: "netherlands", city: "amsterdam" },
+  { name: "barcelona", country: "spain", city: "barcelona" }
+] as const;
+
 export const eventbriteSearchContract: ObservedSearchContract = {
   source: "eventbrite",
   origin: "https://www.eventbrite.co.uk",
@@ -84,21 +113,38 @@ export async function readEventbriteItemList(page: Page): Promise<unknown> {
 }
 
 export function eventbriteSearchUrl(locationText: string): string | null {
-  const normalized = locationText.toLowerCase();
-  if (/\blondon\b/.test(normalized)) return LONDON_URL;
+  return eventbriteSearchUrls(locationText, ["events"])?.[0] ?? null;
+}
 
-  const exactCityCountry: Record<string, [string, string]> = {
-    manchester: ["united-kingdom", "manchester"],
-    birmingham: ["united-kingdom", "birmingham"],
-    bristol: ["united-kingdom", "bristol"],
-    edinburgh: ["united-kingdom", "edinburgh"],
-    paris: ["france", "paris"],
-    berlin: ["germany", "berlin"],
-    amsterdam: ["netherlands", "amsterdam"],
-    barcelona: ["spain", "barcelona"]
-  };
-  const match = exactCityCountry[normalized.trim()];
-  if (match === undefined) return null;
-  const [country, city] = match;
-  return `https://www.eventbrite.co.uk/d/${country}--${city}/events/`;
+export function eventbriteSearchUrls(
+  locationText: string,
+  intents: readonly EventbriteDiscoveryIntent[] = EVENTBRITE_DISCOVERY_INTENTS
+): string[] | null {
+  const route = resolveEventbriteCityRoute(locationText);
+  if (route === null) return null;
+  return intents.map(
+    (intent) =>
+      `https://www.eventbrite.co.uk/d/${route.country}--${route.city}/${intent}/`
+  );
+}
+
+function resolveEventbriteCityRoute(locationText: string):
+  | { country: string; city: string }
+  | null {
+  const normalized = ` ${normalizeLocation(locationText)} `;
+  const route = cityRoutes.find(({ name }) =>
+    normalized.includes(` ${name} `)
+  );
+  return route === undefined
+    ? null
+    : { country: route.country, city: route.city };
+}
+
+function normalizeLocation(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
