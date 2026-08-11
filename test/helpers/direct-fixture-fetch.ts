@@ -18,6 +18,9 @@ const fixtures = {
   ),
   eventbrite: fixture(
     "../../packages/connector-eventbrite/fixtures/search-page.redacted.html"
+  ),
+  guildEvents: fixture(
+    "../../packages/connector-guild/fixtures/upcoming-page-1.redacted.json"
   )
 };
 
@@ -68,6 +71,29 @@ export function createDirectFixtureFetch(
     }
     if (url.startsWith("https://www.eventbrite.co.uk/d/")) {
       return new Response(fixtures.eventbrite);
+    }
+    if (url.startsWith("https://guild.host/api/next/events/upcoming")) {
+      const payload = JSON.parse(fixtures.guildEvents) as {
+        edges: Array<{
+          node: {
+            venue: null | {
+              address: {
+                location: {
+                  geojson: { coordinates: [number, number] };
+                };
+              };
+            };
+          };
+        }>;
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+      };
+      const localVenue = payload.edges[0]?.node.venue;
+      if (localVenue !== null && localVenue !== undefined) {
+        localVenue.address.location.geojson.coordinates = [-0.1278, 51.5074];
+      }
+      payload.pageInfo.hasNextPage = false;
+      payload.pageInfo.endCursor = null;
+      return Response.json(payload);
     }
     throw new Error(`Unexpected direct fixture URL: ${url}`);
   };

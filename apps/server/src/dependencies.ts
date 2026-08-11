@@ -8,8 +8,7 @@ import {
   eventbriteSearchContract
 } from "@event-agg/connector-eventbrite";
 import {
-  createGuildConnector,
-  GUILD_CLOSURE_URL
+  createGuildConnector
 } from "@event-agg/connector-guild";
 import {
   createDirectLumaConnector,
@@ -46,11 +45,11 @@ import type { Page } from "playwright-core";
 
 import type { AppDependencies, ConnectorManager } from "./app.js";
 
-const connectUrls: Record<EventSource, string> = {
+const connectUrls: Record<EventSource, string | null> = {
   luma: lumaSearchContract.connectUrl,
   meetup: meetupSearchContract.connectUrl,
   eventbrite: eventbriteSearchContract.connectUrl,
-  guild: GUILD_CLOSURE_URL
+  guild: null
 };
 
 export interface ServerBrowserHost {
@@ -108,7 +107,7 @@ export function createProductionDependencies(
         createDirectEventbriteConnector(directOptions),
         createEventbriteConnector(browserHost, diagnosticOptions)
       ),
-      createGuildConnector()
+      createGuildConnector(directOptions)
     ];
   validateConnectorSet(rawConnectors);
 
@@ -245,14 +244,16 @@ function positiveEnvironmentInteger(
 function withInteractiveConnection(
   connector: EventConnector,
   browserHost: ServerBrowserHost,
-  connectUrl: string
+  connectUrl: string | null
 ): EventConnector {
   return {
     source: connector.source,
     getStatus: () => connector.getStatus(),
     connect: async function* () {
-      await browserHost.closeSource(connector.source);
-      await browserHost.pageFor(connector.source, connectUrl);
+      if (connectUrl !== null) {
+        await browserHost.closeSource(connector.source);
+        await browserHost.pageFor(connector.source, connectUrl);
+      }
       yield* connector.connect();
     },
     search: (query, signal) => connector.search(query, signal)

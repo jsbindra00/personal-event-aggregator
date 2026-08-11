@@ -187,12 +187,17 @@ describe("production connector wiring", () => {
 
     expect(browserHost.opened).toEqual([]);
     const snapshot = dependencies.searchService.snapshot(searchId);
-    expect(snapshot?.events).toHaveLength(5);
-    expect(
-      snapshot?.sources
-        .filter(({ source }) => source !== "guild")
-        .map(({ state }) => state)
-    ).toEqual(["complete", "complete", "complete"]);
+    expect(snapshot?.events).toHaveLength(7);
+    expect(snapshot?.events.some(({ source }) => source === "guild")).toBe(
+      true
+    );
+    expect(snapshot?.sources.map(({ source, state }) => ({ source, state })))
+      .toEqual([
+        { source: "eventbrite", state: "complete" },
+        { source: "guild", state: "complete" },
+        { source: "luma", state: "complete" },
+        { source: "meetup", state: "complete" }
+      ]);
   });
 
   it("opens only the source whose direct private contract drifted", async () => {
@@ -259,6 +264,26 @@ describe("production connector wiring", () => {
       }
     ]);
     expect(browserHost.closed).toEqual(["meetup"]);
+  });
+
+  it("connects Guild.host without opening a browser", async () => {
+    const browserHost = new FakeBrowserHost();
+    const dependencies = createProductionDependencies({
+      databasePath: ":memory:",
+      browserHost
+    });
+    dependenciesToClose.push(dependencies);
+    const app = buildApp(dependencies);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connectors/guild/connect"
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(browserHost.opened).toEqual([]);
+    expect(browserHost.closed).toEqual([]);
   });
 
   it("serializes overlapping operations for a shared source page", async () => {

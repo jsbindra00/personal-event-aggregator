@@ -536,17 +536,25 @@ describe("complete personal event search", () => {
       messages.filter(
         ({ type }) => type === "event.added" || type === "event.updated"
       )
-    ).toHaveLength(5);
+    ).toHaveLength(8);
     const snapshot = (
       await app.inject({ method: "GET", url: `/api/searches/${searchId}` })
     ).json();
     expect(snapshot.status).toBe("complete");
-    expect(snapshot.events).toHaveLength(5);
+    expect(snapshot.events).toHaveLength(7);
     expect(
-      snapshot.sources
-        .filter(({ source }: { source: string }) => source !== "guild")
-        .map(({ state }: { state: string }) => state)
-    ).toEqual(["complete", "complete", "complete"]);
+      snapshot.sources.map(
+        ({ source, state }: { source: string; state: string }) => ({
+          source,
+          state
+        })
+      )
+    ).toEqual([
+      { source: "eventbrite", state: "complete" },
+      { source: "guild", state: "complete" },
+      { source: "luma", state: "complete" },
+      { source: "meetup", state: "complete" }
+    ]);
 
     const mcpServer = buildEventMcpServer(dependencies);
     const client = new Client({ name: "direct-e2e-client", version: "0.0.0" });
