@@ -2,13 +2,6 @@ export const GUILD_EVENTS_API_URL =
   "https://guild.host/api/next/events/upcoming";
 export const GUILD_LOCATION_RADIUS_KM = 80;
 
-// Retained only until the closure connector is replaced by the direct
-// guild.host connector in the next implementation task.
-export const GUILD_CLOSURE_URL = "https://guild.co/app";
-export const GUILD_CLOSURE_DATE = "2024-10-01";
-export const GUILD_UNAVAILABLE_MESSAGE = "Guild closed on 1 October 2024";
-export const GUILD_UNAVAILABLE_CODE = "source_unavailable";
-
 export interface GuildSearchLocation {
   name: string;
   latitude: number;

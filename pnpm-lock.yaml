@@ -150,9 +150,6 @@ importers:
 
   packages/connector-guild:
     dependencies:
-      '@event-agg/browser':
-        specifier: workspace:*
-        version: link:../browser
       '@event-agg/connector-common':
         specifier: workspace:*
         version: link:../connector-common

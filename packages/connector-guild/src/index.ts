@@ -1,4 +1,5 @@
 export { createGuildConnector } from "./connector.js";
+export type { GuildConnectorOptions } from "./connector.js";
 export {
   GUILD_EVENTS_API_URL,
   GUILD_LOCATION_RADIUS_KM,

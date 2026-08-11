@@ -15,7 +15,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@event-agg/browser": "workspace:*",
     "@event-agg/connector-common": "workspace:*",
     "@event-agg/core": "workspace:*",
     "zod": "^4.4.3"

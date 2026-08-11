@@ -1,25 +1,29 @@
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-import { BrowserHost } from "@event-agg/browser";
+import { resolveSearchQuery } from "@event-agg/core";
 import { expect, it } from "vitest";
 
-import { GUILD_CLOSURE_URL } from "../src/contract.js";
+import { createGuildConnector } from "../src/connector.js";
 
 const liveTest = process.env.LIVE_CONNECTOR_SMOKE === "guild" ? it : it.skip;
 
-liveTest("verifies the official Guild closure page", async () => {
-  const profilePath = await mkdtemp(join(tmpdir(), "event-agg-guild-live-"));
-  const host = new BrowserHost({
-    profilePath,
-    launchOptions: { headless: true }
+liveTest("reads the public Guild.host feed without a browser", async () => {
+  const now = new Date();
+  const end = new Date(now);
+  end.setUTCDate(end.getUTCDate() + 30);
+  const query = resolveSearchQuery({
+    locationText: "Birmingham",
+    startDate: now.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+    timeZone: "Europe/London"
   });
-  try {
-    const page = await host.pageFor("guild", GUILD_CLOSURE_URL);
-    const text = await page.locator("body").innerText();
-    expect(text).toContain("closed on 1 October 2024");
-  } finally {
-    await host.close();
+  const messages = [];
+  for await (const message of createGuildConnector().search(
+    query,
+    new AbortController().signal
+  )) {
+    messages.push(message);
   }
-}, 30_000);
+
+  expect(messages.at(-1)?.type, JSON.stringify(messages.at(-1))).toBe(
+    "complete"
+  );
+}, 60_000);
