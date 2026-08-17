@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "pnpm -r build",
+    "build:vercel": "VITE_PUBLIC_MODE=true pnpm --filter @event-agg/web build",
     "dev": "pnpm --parallel --filter @event-agg/server --filter @event-agg/web dev",
     "model:check": "tsx scripts/check-local-model.ts",
     "test": "vitest run",

@@ -44,6 +44,36 @@ Browser sessions live in `.data/chrome-profile`; application data lives in `.dat
 
 Direct source searches start together. Operations against the same source are serialized so a rare browser fallback or explicit Connect action cannot collide with another search.
 
+## Public Vercel application
+
+The repository also ships a stateless public mode for Vercel. It keeps each
+visitor's interest profile in that browser's local storage and streams results
+from the anonymous direct Meetup, Luma, Eventbrite, and Guild.host transports.
+No event-platform credentials, browser profile, or shared interest database are
+used by the hosted application.
+
+Hosted mode uses the conservative deterministic relevance evaluator. Ollama,
+`gemma3:4b`, interactive source sign-in, Chrome fallback, SQLite history, and
+MCP remain local-only capabilities because they require local compute or
+persistent state.
+
+Build the hosted frontend locally with:
+
+```bash
+pnpm build:vercel
+```
+
+Deploy from the repository root with the Vercel CLI:
+
+```bash
+vercel deploy
+vercel deploy --prod
+```
+
+The public endpoint is `POST /api/search`. It accepts a query and interest
+profile, limits searches to 31 inclusive calendar days, and returns
+newline-delimited `SearchStreamMessage` JSON until `search.completed`.
+
 ## Local relevance filtering
 
 The collectors intentionally cast a broad net. Candidate titles, descriptions, organizers, venues, and tags are sent in small batches to `gemma3:4b` through Ollama on loopback only. Nothing is sent to a hosted model. Saved exclusions are applied before inference, and decisions are cached against the event, interest profile, model, and prompt version.

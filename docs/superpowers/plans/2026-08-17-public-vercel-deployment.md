@@ -100,8 +100,8 @@
 **Interfaces:**
 - Produces: `build:vercel` script and a root Vercel project publishing `apps/web/dist` plus `api/search.ts`.
 
-- [ ] **Step 1: Write a failing configuration test** that parses `vercel.json` and asserts Fluid Compute, output directory, function duration/cancellation, API no-cache/security headers, and SPA fallback routing.
-- [ ] **Step 2: Run the focused configuration test** and verify `vercel.json` is missing.
+- [ ] **Step 1: Run the missing `pnpm build:vercel` command** and verify the hosted build entrypoint does not exist yet.
+- [ ] **Step 2: Avoid a catch-all SPA rewrite** because the app has no client routes and `/api/search` must never be shadowed.
 - [ ] **Step 3: Add `build:vercel`, `vercel.json`, `.vercel/` ignore, and public/local deployment documentation.**
 - [ ] **Step 4: Run the focused test, `pnpm test`, `pnpm typecheck`, and `pnpm build:vercel`.**
 - [ ] **Step 5: Commit** with `build: configure public Vercel deployment`.
@@ -120,4 +120,3 @@
 - [ ] **Step 4: Verify desktop and 390-pixel rendering, browser-local interest persistence, and a real Birmingham 30-day search through the preview.**
 - [ ] **Step 5: Fix any defect with a failing test first, then repeat build and preview verification.**
 - [ ] **Step 6: Deploy or promote the verified artifact to production, push `main` to GitHub, and verify the production URL.**
-

@@ -1,11 +1,11 @@
-import {
-  interestProfileSchema,
-  type ConnectorStatus,
-  type EventSearchQuery,
-  type EventSource,
-  type InterestProfile,
-  type SearchStreamMessage
+import type {
+  ConnectorStatus,
+  EventSearchQuery,
+  EventSource,
+  InterestProfile,
+  SearchStreamMessage
 } from "@event-agg/core";
+import { interestProfileSchema } from "@event-agg/core/schemas";
 
 import type { EventApi } from "./api.js";
 
