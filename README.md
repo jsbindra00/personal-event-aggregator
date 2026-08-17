@@ -46,16 +46,20 @@ Direct source searches start together. Operations against the same source are se
 
 ## Public Vercel application
 
+Use the hosted application at
+[personal-event-aggregator.vercel.app](https://personal-event-aggregator.vercel.app).
+
 The repository also ships a stateless public mode for Vercel. It keeps each
 visitor's interest profile in that browser's local storage and streams results
 from the anonymous direct Meetup, Luma, Eventbrite, and Guild.host transports.
 No event-platform credentials, browser profile, or shared interest database are
 used by the hosted application.
 
-Hosted mode uses the conservative deterministic relevance evaluator. Ollama,
-`gemma3:4b`, interactive source sign-in, Chrome fallback, SQLite history, and
-MCP remain local-only capabilities because they require local compute or
-persistent state.
+Hosted mode returns in-person events near the requested location and uses a
+conservative deterministic evaluator that requires complete saved-interest
+phrases. Ollama, `gemma3:4b`, online events, interactive source sign-in, Chrome
+fallback, SQLite history, and MCP remain local-only capabilities because they
+require local compute or persistent state.
 
 Build the hosted frontend locally with:
 
@@ -63,11 +67,11 @@ Build the hosted frontend locally with:
 pnpm build:vercel
 ```
 
-Deploy from the repository root with the Vercel CLI:
+Build and deploy from the repository root with the current Vercel CLI:
 
 ```bash
-vercel deploy
-vercel deploy --prod
+pnpm dlx vercel@59.1.3 build --prod
+pnpm dlx vercel@59.1.3 deploy --prebuilt --prod
 ```
 
 The public endpoint is `POST /api/search`. It accepts a query and interest
