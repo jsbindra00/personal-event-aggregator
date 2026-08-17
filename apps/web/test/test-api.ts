@@ -16,7 +16,9 @@ export interface TestEventApi extends EventApi {
   cancelledSearches: string[];
 }
 
-export function createTestEventApi(): TestEventApi {
+export function createTestEventApi(
+  options: { isPublicMode?: boolean } = {}
+): TestEventApi {
   let listener: ((message: SearchStreamMessage) => void) | null = null;
   let interests: InterestProfile = {
     positive: ["AI"],
@@ -37,6 +39,7 @@ export function createTestEventApi(): TestEventApi {
   const cancelledSearches: string[] = [];
 
   return {
+    isPublicMode: options.isPublicMode ?? false,
     searches,
     cancelledSearches,
     connectedSources,

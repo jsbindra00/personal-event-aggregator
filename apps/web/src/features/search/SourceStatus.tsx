@@ -10,9 +10,14 @@ const sourceNames: Record<EventSource, string> = {
 interface SourceStatusProps {
   statuses: Partial<Record<EventSource, ConnectorStatus>>;
   onConnect(source: EventSource): void | Promise<void>;
+  allowConnections?: boolean;
 }
 
-export function SourceStatus({ statuses, onConnect }: SourceStatusProps) {
+export function SourceStatus({
+  statuses,
+  onConnect,
+  allowConnections = true
+}: SourceStatusProps) {
   return (
     <div className="source-strip" aria-label="Event sources">
       {(Object.keys(sourceNames) as EventSource[]).map((source) => {
@@ -22,7 +27,7 @@ export function SourceStatus({ statuses, onConnect }: SourceStatusProps) {
             <span className="source-dot" aria-hidden="true" />
             <strong>{sourceNames[source]}</strong>
             <span>{(status?.state ?? "disconnected").replaceAll("_", " ")}</span>
-            {actionFor(source, status) && (
+            {allowConnections && actionFor(source, status) && (
               <button
                 type="button"
                 className="source-action"

@@ -9,9 +9,10 @@ interface SearchFormProps {
 }
 
 export function SearchForm({ isSearching, onSearch, onStop }: SearchFormProps) {
+  const [defaults] = useState(() => defaultSearchDates(new Date()));
   const [locationText, setLocationText] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(defaults.startDate);
+  const [endDate, setEndDate] = useState(defaults.endDate);
   const [timeZone, setTimeZone] = useState(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
   );
@@ -71,3 +72,18 @@ export function SearchForm({ isSearching, onSearch, onStop }: SearchFormProps) {
   );
 }
 
+export function defaultSearchDates(now: Date): {
+  startDate: string;
+  endDate: string;
+} {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 30);
+  return { startDate: localDate(start), endDate: localDate(end) };
+}
+
+function localDate(value: Date): string {
+  const year = String(value.getFullYear()).padStart(4, "0");
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}

@@ -25,6 +25,9 @@ h1 { margin: 0; max-width: 780px; font-size: clamp(54px, 8vw, 104px); font-weigh
 .radar-mark::before { content: ""; position: absolute; inset: 50% 0 auto 50%; width: 48%; height: 1px; background: var(--acid); transform-origin: left; transform: rotate(-42deg); box-shadow: 0 0 18px var(--acid); }
 .radar-mark span { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: var(--acid); right: 25px; top: 47px; box-shadow: 0 0 18px var(--acid); }
 
+.public-mode-note { display: grid; grid-template-columns: auto 1fr; gap: 12px 18px; margin: 32px 0 0; padding: 16px 18px; border: 1px solid #526538; color: var(--muted); background: #11180f; font-size: 13px; line-height: 1.55; }
+.public-mode-note strong { color: var(--acid); white-space: nowrap; }
+
 .interest-panel { margin: 32px 0; border: 1px solid var(--line); background: rgba(18,23,19,.78); }
 .interest-panel summary { display: flex; justify-content: space-between; padding: 20px 22px; cursor: pointer; }
 .interest-panel small { color: var(--muted); }
@@ -92,6 +95,7 @@ h2 { margin: 0; font-size: clamp(30px, 4vw, 48px); letter-spacing: -.04em; font-
 
 @media (max-width: 580px) {
   h1 { font-size: 52px; }
+  .public-mode-note { grid-template-columns: 1fr; }
   .interest-grid, .search-form { grid-template-columns: 1fr; }
   .interest-note, .location-field { grid-column: auto; }
   .search-form button { min-height: 56px; }

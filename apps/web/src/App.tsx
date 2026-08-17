@@ -62,6 +62,17 @@ export function App({ api }: AppProps) {
         <div className="radar-mark" aria-hidden="true"><span /></div>
       </header>
 
+      {api.isPublicMode === true && (
+        <aside className="public-mode-note" aria-label="Hosted search privacy">
+          <strong>Private by default.</strong>
+          <span>
+            Your interests stay only in this browser. Hosted searches use anonymous
+            direct source requests and deterministic filtering; install locally for
+            Gemma, MCP, and source sign-in.
+          </span>
+        </aside>
+      )}
+
       <InterestEditor profile={profile} onSave={saveProfile} />
 
       <section className="search-shell">
@@ -70,7 +81,11 @@ export function App({ api }: AppProps) {
           onSearch={search.start}
           onStop={search.stop}
         />
-        <SourceStatus statuses={statuses} onConnect={connectSource} />
+        <SourceStatus
+          statuses={statuses}
+          onConnect={connectSource}
+          allowConnections={api.isPublicMode !== true}
+        />
       </section>
 
       <section className="results-section">

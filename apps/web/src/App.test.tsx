@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { NormalizedEvent } from "@event-agg/core";
 
@@ -131,5 +131,37 @@ describe("App", () => {
       await screen.findByRole("button", { name: "Sign in again Luma" })
     );
     expect(api.connectedSources).toEqual(["luma"]);
+  });
+
+  it("explains public privacy, hides connection actions, and defaults 31 days", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-17T12:00:00.000Z"));
+    try {
+      const api = createTestEventApi({ isPublicMode: true });
+      api.connectorStatuses[0] = {
+        source: "luma",
+        state: "auth_required",
+        lastSuccessAt: null,
+        errorCode: "auth_required",
+        safeMessage: "Sign in to Luma"
+      };
+
+      render(<App api={api} />);
+
+      expect(
+        screen.getByText(/interests stay only in this browser/i)
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: /sign in again luma/i })
+      ).toBeNull();
+      expect(
+        (screen.getByLabelText(/start date/i) as HTMLInputElement).value
+      ).toBe("2026-08-17");
+      expect(
+        (screen.getByLabelText(/end date/i) as HTMLInputElement).value
+      ).toBe("2026-09-16");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
