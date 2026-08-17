@@ -7,6 +7,7 @@ import type {
 } from "@event-agg/core";
 
 export interface EventApi {
+  readonly isPublicMode?: boolean;
   getInterests(): Promise<InterestProfile>;
   setInterests(profile: InterestProfile): Promise<InterestProfile>;
   getConnectors(): Promise<ConnectorStatus[]>;
