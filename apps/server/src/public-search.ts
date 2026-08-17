@@ -2,6 +2,7 @@ import {
   createSearchService,
   eventSearchQuerySchema,
   resolveSearchQuery,
+  type ConnectorMessage,
   type EventConnector,
   type InterestProfile,
   type SearchService,
@@ -102,7 +103,7 @@ function searchService(
   options: PublicSearchRuntimeOptions
 ): SearchService {
   return createSearchService({
-    connectors: options.connectors ?? directConnectors(),
+    connectors: (options.connectors ?? directConnectors()).map(inPersonOnly),
     store: noOpStore,
     getInterests: () => interests,
     relevanceEvaluator: createLexicalRelevanceEvaluator(),
@@ -117,10 +118,32 @@ function directConnectors(): EventConnector[] {
   const retry = { maxAttempts: 1 };
   return [
     createDirectLumaConnector({ maxPages: 6, retry }),
-    createDirectMeetupConnector({ maxPages: 6, retry }),
+    createDirectMeetupConnector({ maxPages: 6, retry, strictLocation: true }),
     createDirectEventbriteConnector({ timeoutMs: 12_000, retry }),
     createGuildConnector({ maxPages: 40, timeoutMs: 12_000, retry })
   ];
+}
+
+function inPersonOnly(connector: EventConnector): EventConnector {
+  return {
+    source: connector.source,
+    getStatus: () => connector.getStatus(),
+    connect: () => connector.connect(),
+    async *search(query, signal) {
+      let count = 0;
+      for await (const message of connector.search(query, signal)) {
+        if (message.type === "event") {
+          if (message.event.isOnline === true) continue;
+          count += 1;
+          yield message;
+          continue;
+        }
+        yield message.type === "complete"
+          ? ({ ...message, count } satisfies ConnectorMessage)
+          : message;
+      }
+    }
+  };
 }
 
 const noOpStore: SearchStore = {

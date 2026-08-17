@@ -12,6 +12,7 @@ import type {
   ConnectorMessage,
   ConnectorStatus,
   EventConnector,
+  RawSourceEvent,
   ResolvedSearchQuery
 } from "@event-agg/core";
 import { z } from "zod";
@@ -67,6 +68,7 @@ export interface DirectMeetupOptions {
   diagnostic?: (value: unknown) => void;
   maxPages?: number;
   pageSize?: number;
+  strictLocation?: boolean;
   retry?: ConnectorRetryOptions;
 }
 
@@ -83,6 +85,7 @@ class DirectMeetupConnector implements EventConnector {
   private readonly diagnostic: (value: unknown) => void;
   private readonly maxPages: number;
   private readonly pageSize: number;
+  private readonly strictLocation: boolean;
   private readonly retry: ConnectorRetryOptions;
   private status: ConnectorStatus = {
     source: "meetup",
@@ -97,6 +100,7 @@ class DirectMeetupConnector implements EventConnector {
     this.diagnostic = options.diagnostic ?? (() => undefined);
     this.maxPages = positiveInteger(options.maxPages ?? 12, "maxPages");
     this.pageSize = positiveInteger(options.pageSize ?? 50, "pageSize");
+    this.strictLocation = options.strictLocation ?? false;
     this.retry = options.retry ?? {};
   }
 
@@ -162,6 +166,12 @@ class DirectMeetupConnector implements EventConnector {
           const eventStart = Date.parse(event.startsAt);
           if (eventStart < endsBefore) allBeyondEnd = false;
           if (eventStart < startsAt || eventStart >= endsBefore) continue;
+          if (
+            this.strictLocation &&
+            !matchesResolvedLocation(event, location)
+          ) {
+            continue;
+          }
           const identity = event.sourceEventId ?? event.canonicalUrl;
           if (seenEvents.has(identity)) continue;
           seenEvents.add(identity);
@@ -388,6 +398,18 @@ function normalizeLocation(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function matchesResolvedLocation(
+  event: RawSourceEvent,
+  location: MeetupLocation
+): boolean {
+  if (event.isOnline === true) return true;
+  const city = normalizeLocation(location.city);
+  const eventLocation = normalizeLocation(
+    [event.venueName, event.addressText].filter(Boolean).join(" ")
+  );
+  return ` ${eventLocation} `.includes(` ${city} `);
 }
 
 function positiveInteger(value: number, name: string): number {

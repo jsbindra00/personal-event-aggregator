@@ -151,6 +151,7 @@ describe("App", () => {
       expect(
         screen.getByText(/interests stay only in this browser/i)
       ).toBeTruthy();
+      expect(screen.getByText(/in-person results near your location/i)).toBeTruthy();
       expect(
         screen.queryByRole("button", { name: /sign in again luma/i })
       ).toBeNull();

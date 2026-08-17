@@ -70,6 +70,38 @@ describe("direct Meetup discovery", () => {
     expect(messages.at(-1)).toMatchObject({ count: 2 });
   });
 
+  it("can enforce the resolved city for physical events", async () => {
+    const payload = structuredClone(pageOne);
+    const remote = structuredClone(payload.data.result.edges[0]) as {
+      node: {
+        id: string;
+        eventUrl: string;
+        venue: { city: string; state: string; country: string };
+      };
+    };
+    remote.node.id = "evt_remote";
+    remote.node.eventUrl = "https://www.meetup.com/remote/events/evt_remote/";
+    remote.node.venue = {
+      ...remote.node.venue,
+      city: "Southfield",
+      state: "Michigan",
+      country: "us"
+    };
+    payload.data.result.edges = [payload.data.result.edges[0]!, remote];
+    payload.data.result.pageInfo = { hasNextPage: false, endCursor: null };
+    const connector = createDirectMeetupConnector({
+      fetch: graphqlFetch([], [payload]),
+      strictLocation: true
+    });
+
+    const messages = await collect(
+      connector.search(query, new AbortController().signal)
+    );
+
+    expect(eventTitles(messages)).toEqual(["London AI Builders"]);
+    expect(messages.at(-1)).toMatchObject({ type: "complete", count: 1 });
+  });
+
   it("classifies an anonymous GraphQL auth response", async () => {
     const connector = createDirectMeetupConnector({
       fetch: graphqlFetch([], [
@@ -256,4 +288,10 @@ async function collect(
   const messages: ConnectorMessage[] = [];
   for await (const message of iterable) messages.push(message);
   return messages;
+}
+
+function eventTitles(messages: ConnectorMessage[]): string[] {
+  return messages.flatMap((message) =>
+    message.type === "event" ? [message.event.title] : []
+  );
 }

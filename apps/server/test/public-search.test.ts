@@ -120,6 +120,45 @@ describe("createPublicSearchRuntime", () => {
       relevanceDecision: "show"
     });
   });
+
+  it("omits online events from a city search and reports the filtered count", async () => {
+    const runtime = createPublicSearchRuntime({
+      connectors: [
+        connector("luma", [
+          { type: "event", source: "luma", event: aiEvent },
+          {
+            type: "event",
+            source: "luma",
+            event: {
+              ...aiEvent,
+              sourceEventId: "worldwide-ai",
+              canonicalUrl: "https://lu.ma/worldwide-ai",
+              title: "Worldwide AI livestream",
+              addressText: null,
+              isOnline: true
+            }
+          },
+          { type: "complete", source: "luma", count: 2 }
+        ])
+      ],
+      createId: () => "public-search-2",
+      now: () => new Date("2026-08-17T08:00:00.000Z")
+    });
+    const messages = [];
+
+    for await (const message of runtime.stream(
+      validRequest,
+      new AbortController().signal
+    )) {
+      messages.push(message);
+    }
+
+    expect(
+      messages
+        .filter(({ type }) => type === "event.added")
+        .map(({ event }) => event?.title)
+    ).toEqual(["AI Builders"]);
+  });
 });
 
 const aiEvent: RawSourceEvent = {

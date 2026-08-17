@@ -67,8 +67,9 @@ export function App({ api }: AppProps) {
           <strong>Private by default.</strong>
           <span>
             Your interests stay only in this browser. Hosted searches use anonymous
-            direct source requests and deterministic filtering; install locally for
-            Gemma, MCP, and source sign-in.
+            direct source requests and deterministic filtering, and return in-person
+            results near your location. Install locally for Gemma, MCP, source sign-in,
+            and online events.
           </span>
         </aside>
       )}
