@@ -3,7 +3,7 @@ import {
   publicSearchRequestSchema,
   streamPublicSearch,
   type PublicSearchRequest
-} from "@event-agg/server/public-search";
+} from "./public-search.js";
 
 export const maxDuration = 300;
 

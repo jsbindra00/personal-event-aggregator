@@ -4,7 +4,7 @@
   "outputDirectory": "apps/web/dist",
   "fluid": true,
   "functions": {
-    "api/search.ts": {
+    "api/search.js": {
       "maxDuration": 300,
       "supportsCancellation": true
     }

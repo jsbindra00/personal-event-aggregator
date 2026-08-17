@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { SearchStreamMessage } from "@event-agg/core";
 
-import { createSearchHandler } from "../search.js";
+import { createSearchHandler } from "../src/vercel-search.js";
 
 const requestBody = {
   query: {
@@ -63,7 +63,10 @@ describe("public search function", () => {
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    const lines = (await response.text()).trim().split("\n").map(JSON.parse);
+    const lines = (await response.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
     expect(lines).toEqual([started, completed]);
   });
 

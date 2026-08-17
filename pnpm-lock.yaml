@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      '@event-agg/server':
-        specifier: workspace:*
-        version: link:apps/server
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
@@ -18,6 +14,9 @@ importers:
       '@types/node':
         specifier: ^26.2.0
         version: 26.2.0
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
       tsx:
         specifier: ^4.23.11
         version: 4.23.11

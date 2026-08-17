@@ -1,6 +1,7 @@
 node_modules/
 .worktrees/
 .vercel/
+/api/
 dist/
 coverage/
 work/

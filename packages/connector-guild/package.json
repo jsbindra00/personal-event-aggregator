@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./direct": {
+      "types": "./src/connector.ts",
+      "default": "./src/connector.ts"
     }
   },
   "scripts": {

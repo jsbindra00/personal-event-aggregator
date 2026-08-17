@@ -8,10 +8,10 @@ import {
   type SearchStore,
   type SearchStreamMessage
 } from "@event-agg/core";
-import { createDirectEventbriteConnector } from "@event-agg/connector-eventbrite";
-import { createGuildConnector } from "@event-agg/connector-guild";
-import { createDirectLumaConnector } from "@event-agg/connector-luma";
-import { createDirectMeetupConnector } from "@event-agg/connector-meetup";
+import { createDirectEventbriteConnector } from "@event-agg/connector-eventbrite/direct";
+import { createGuildConnector } from "@event-agg/connector-guild/direct";
+import { createDirectLumaConnector } from "@event-agg/connector-luma/direct";
+import { createDirectMeetupConnector } from "@event-agg/connector-meetup/direct";
 import { createLexicalRelevanceEvaluator } from "@event-agg/relevance";
 import { z } from "zod";
 
