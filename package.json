@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "pnpm -r build",
-    "build:vercel": "VITE_PUBLIC_MODE=true pnpm --filter @event-agg/web build && pnpm exec esbuild apps/server/src/vercel-search.ts --bundle --platform=node --format=esm --target=node24 --outfile=api/search.js",
+    "build:vercel": "VITE_PUBLIC_MODE=true pnpm --filter @event-agg/web build && pnpm exec esbuild apps/server/src/vercel-search.ts --bundle --platform=node --format=esm --target=node24 --outfile=.vercel-build/search.js",
     "dev": "pnpm --parallel --filter @event-agg/server --filter @event-agg/web dev",
     "model:check": "tsx scripts/check-local-model.ts",
     "test": "vitest run",

@@ -3,6 +3,12 @@
   "buildCommand": "pnpm build:vercel",
   "outputDirectory": "apps/web/dist",
   "fluid": true,
+  "functions": {
+    "api/search.js": {
+      "maxDuration": 300,
+      "supportsCancellation": true
+    }
+  },
   "headers": [
     {
       "source": "/api/(.*)",
