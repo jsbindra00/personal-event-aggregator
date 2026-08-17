@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@event-agg/server':
+        specifier: workspace:*
+        version: link:apps/server
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0

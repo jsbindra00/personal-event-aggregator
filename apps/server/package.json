@@ -7,6 +7,10 @@
     "./dependencies": {
       "types": "./src/dependencies.ts",
       "default": "./src/dependencies.ts"
+    },
+    "./public-search": {
+      "types": "./src/public-search.ts",
+      "default": "./src/public-search.ts"
     }
   },
   "scripts": {
