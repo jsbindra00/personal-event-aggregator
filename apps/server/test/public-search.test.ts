@@ -138,7 +138,18 @@ describe("createPublicSearchRuntime", () => {
               isOnline: true
             }
           },
-          { type: "complete", source: "luma", count: 2 }
+          {
+            type: "event",
+            source: "luma",
+            event: {
+              ...aiEvent,
+              sourceEventId: "mislabelled-online-ai",
+              canonicalUrl: "https://lu.ma/mislabelled-online-ai",
+              title: "Birmingham AI Online",
+              isOnline: false
+            }
+          },
+          { type: "complete", source: "luma", count: 3 }
         ])
       ],
       createId: () => "public-search-2",
@@ -158,6 +169,62 @@ describe("createPublicSearchRuntime", () => {
         .filter(({ type }) => type === "event.added")
         .map(({ event }) => event?.title)
     ).toEqual(["AI Builders"]);
+  });
+
+  it("requires a complete multi-word interest instead of one generic token", async () => {
+    const runtime = createPublicSearchRuntime({
+      connectors: [
+        connector("eventbrite", [
+          {
+            type: "event",
+            source: "eventbrite",
+            event: {
+              ...aiEvent,
+              source: "eventbrite",
+              sourceEventId: "product-design-systems",
+              canonicalUrl: "https://eventbrite.com/e/product-design-systems",
+              title: "Product Design Systems Workshop"
+            }
+          },
+          {
+            type: "event",
+            source: "eventbrite",
+            event: {
+              ...aiEvent,
+              source: "eventbrite",
+              sourceEventId: "tote-bag",
+              canonicalUrl: "https://eventbrite.com/e/tote-bag",
+              title: "Design your Tote Bag",
+              descriptionText: "An arts and crafts workshop"
+            }
+          },
+          { type: "complete", source: "eventbrite", count: 2 }
+        ])
+      ],
+      createId: () => "public-search-3",
+      now: () => new Date("2026-08-17T08:00:00.000Z")
+    });
+    const messages = [];
+
+    for await (const message of runtime.stream(
+      {
+        ...validRequest,
+        interests: {
+          positive: ["product design"],
+          excluded: [],
+          note: ""
+        }
+      },
+      new AbortController().signal
+    )) {
+      messages.push(message);
+    }
+
+    expect(
+      messages
+        .filter(({ type }) => type === "event.added")
+        .map(({ event }) => event?.title)
+    ).toEqual(["Product Design Systems Workshop"]);
   });
 });
 

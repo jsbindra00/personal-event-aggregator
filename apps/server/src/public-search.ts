@@ -4,7 +4,10 @@ import {
   resolveSearchQuery,
   type ConnectorMessage,
   type EventConnector,
+  type EventRelevanceEvaluator,
   type InterestProfile,
+  type NormalizedEvent,
+  type RelevanceDecision,
   type SearchService,
   type SearchStore,
   type SearchStreamMessage
@@ -13,7 +16,6 @@ import { createDirectEventbriteConnector } from "@event-agg/connector-eventbrite
 import { createGuildConnector } from "@event-agg/connector-guild/direct";
 import { createDirectLumaConnector } from "@event-agg/connector-luma/direct";
 import { createDirectMeetupConnector } from "@event-agg/connector-meetup/direct";
-import { createLexicalRelevanceEvaluator } from "@event-agg/relevance";
 import { z } from "zod";
 
 const publicInterestSchema = z.object({
@@ -106,7 +108,7 @@ function searchService(
     connectors: (options.connectors ?? directConnectors()).map(inPersonOnly),
     store: noOpStore,
     getInterests: () => interests,
-    relevanceEvaluator: createLexicalRelevanceEvaluator(),
+    relevanceEvaluator: createHostedRelevanceEvaluator(),
     relevanceBatchSize: 10,
     relevanceFlushMs: 50,
     ...(options.createId === undefined ? {} : { createId: options.createId }),
@@ -133,7 +135,12 @@ function inPersonOnly(connector: EventConnector): EventConnector {
       let count = 0;
       for await (const message of connector.search(query, signal)) {
         if (message.type === "event") {
-          if (message.event.isOnline === true) continue;
+          if (
+            message.event.isOnline === true ||
+            looksLikeOnlineEvent(message.event)
+          ) {
+            continue;
+          }
           count += 1;
           yield message;
           continue;
@@ -144,6 +151,99 @@ function inPersonOnly(connector: EventConnector): EventConnector {
       }
     }
   };
+}
+
+function createHostedRelevanceEvaluator(): EventRelevanceEvaluator {
+  return {
+    fingerprint: "hosted-phrase:v1",
+    async evaluate(events, profile, signal) {
+      signal.throwIfAborted();
+      return events.map((event) => hostedPhraseDecision(event, profile));
+    },
+    async status(signal) {
+      signal?.throwIfAborted();
+      return {
+        state: "ready",
+        evaluator: "hosted-phrase",
+        model: null,
+        evaluatedCount: 0,
+        showCount: 0,
+        maybeCount: 0,
+        hideCount: 0,
+        safeMessage: null
+      };
+    }
+  };
+}
+
+function hostedPhraseDecision(
+  event: NormalizedEvent,
+  profile: InterestProfile
+): RelevanceDecision {
+  const title = normalizeWords(event.title);
+  const searchable = normalizeWords(
+    [
+      event.title,
+      event.descriptionText,
+      event.organizerName,
+      event.tags.join(" ")
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+  if (
+    profile.excluded.some((interest) =>
+      includesWholePhrase(searchable, normalizeWords(interest))
+    )
+  ) {
+    return hiddenDecision(event.id, "Matches a saved exclusion");
+  }
+
+  const matchedInterests = profile.positive.filter((interest) =>
+    includesWholePhrase(searchable, normalizeWords(interest))
+  );
+  if (matchedInterests.length === 0) {
+    return hiddenDecision(event.id, "No complete saved-interest phrase matched");
+  }
+  const titleMatches = matchedInterests.filter((interest) =>
+    includesWholePhrase(title, normalizeWords(interest))
+  ).length;
+  return {
+    eventId: event.id,
+    decision: "show",
+    score: Math.min(100, 72 + titleMatches * 8 + matchedInterests.length * 2),
+    confidence: 1,
+    matchedInterests,
+    reason: "Matched complete saved-interest phrases"
+  };
+}
+
+function hiddenDecision(eventId: string, reason: string): RelevanceDecision {
+  return {
+    eventId,
+    decision: "hide",
+    score: 0,
+    confidence: 1,
+    matchedInterests: [],
+    reason
+  };
+}
+
+function looksLikeOnlineEvent(event: { title: string }): boolean {
+  return /\b(?:online|virtual|webinar|livestream|live stream)\b/i.test(event.title);
+}
+
+function includesWholePhrase(haystack: string, phrase: string): boolean {
+  return phrase.length > 0 && ` ${haystack} `.includes(` ${phrase} `);
+}
+
+function normalizeWords(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase("en")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 const noOpStore: SearchStore = {
