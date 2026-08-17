@@ -15,3 +15,4 @@ work/
 *.trace.zip
 playwright-report/
 .DS_Store
+.env*
