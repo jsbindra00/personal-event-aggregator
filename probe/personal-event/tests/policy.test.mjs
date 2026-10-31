@@ -6,8 +6,36 @@ import {mkdtempSync,writeFileSync,symlinkSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const api = await import('../check-isolation.mjs');
-const profile=()=>({Config:{Hostname:'d0-offline',User:'10001:10001',Env:['PATH=/usr/local/bin:/usr/bin:/bin','HOME=/tmp','LANG=C.UTF-8','HOSTNAME=d0-offline','NODE_ENV=test','WORKERD_BINARY_PATH=/probe/tooling/node_modules/@cloudflare/workerd-linux-64/bin/workerd'],Entrypoint:['node','/probe/entry.mjs'],Cmd:[],WorkingDir:'/probe',Tty:false,OpenStdin:false},HostConfig:{NetworkMode:'none',ReadonlyRootfs:true,Privileged:false,CapDrop:['ALL'],CapAdd:null,SecurityOpt:['no-new-privileges'],Binds:null,Devices:[],DeviceRequests:null,ExtraHosts:null,PidMode:'',IpcMode:'private',CgroupnsMode:'private',UsernsMode:'',PortBindings:{},PublishAllPorts:false,Memory:2147483648,MemorySwap:2147483648,NanoCpus:2000000000,PidsLimit:256,Tmpfs:{'/tmp':'rw,noexec,nosuid,nodev,size=67108864,mode=1777','/run':'rw,noexec,nosuid,nodev,size=16777216,mode=755'}},Mounts:[{Type:'bind',Source:'/owned/control.json',Destination:'/control.json',RW:false}],NetworkSettings:{Networks:{none:{IPAddress:'',GlobalIPv6Address:'',Gateway:''}},Ports:{} }});
-test('accepts exact reviewed offline profile',()=>assert.equal(api.validateInspection(profile(),'/owned/control.json'),true));
+const profile=()=>({Config:{Hostname:'d0-offline',User:'10001:10001',Env:['PATH=/usr/local/bin:/usr/bin:/bin','HOME=/tmp','LANG=C.UTF-8','HOSTNAME=d0-offline','NODE_ENV=test','WORKERD_BINARY_PATH=/probe/tooling/node_modules/@cloudflare/workerd-linux-64/bin/workerd','NODE_VERSION','YARN_VERSION'],Entrypoint:['node','/probe/entry.mjs'],Cmd:[],WorkingDir:'/probe',Tty:false,OpenStdin:false},HostConfig:{NetworkMode:'none',ReadonlyRootfs:true,Privileged:false,CapDrop:['ALL'],CapAdd:null,SecurityOpt:['no-new-privileges'],Binds:null,Devices:[],DeviceRequests:null,ExtraHosts:null,PidMode:'',IpcMode:'private',CgroupnsMode:'private',UsernsMode:'',PortBindings:{},PublishAllPorts:false,Memory:2147483648,MemorySwap:2147483648,NanoCpus:2000000000,PidsLimit:256,Tmpfs:{'/tmp':'rw,noexec,nosuid,nodev,size=67108864,mode=1777','/run':'rw,noexec,nosuid,nodev,size=16777216,mode=755'}},Mounts:[{Type:'bind',Source:'/owned/control.json',Destination:'/control.json',RW:false}],NetworkSettings:{Networks:{none:{IPAddress:'',GlobalIPv6Address:'',Gateway:''}},Ports:{} }});
+// Matches the observed Docker unset metadata shape; this fixture is still simulated.
+test('accepts exact reviewed offline profile including two bare unset markers',()=>assert.equal(api.validateInspection(profile(),'/owned/control.json'),true));
+test('rejects unknown, assigned, duplicated or missing inspection environment entries',()=>{
+ // Dropping all bare entries, deduplicating, or comparing only names would break these controls.
+ for(const [name,mutate] of [
+  ['unknown bare name',e=>e.push('AWS_SESSION_TOKEN')],
+  ['bare preload name',e=>e.push('NODE_OPTIONS')],
+  ['assigned node marker',e=>e[e.indexOf('NODE_VERSION')]='NODE_VERSION=24.20.0'],
+  ['empty node assignment',e=>e[e.indexOf('NODE_VERSION')]='NODE_VERSION='],
+  ['assigned yarn marker',e=>e[e.indexOf('YARN_VERSION')]='YARN_VERSION=1.22.22'],
+  ['empty yarn assignment',e=>e[e.indexOf('YARN_VERSION')]='YARN_VERSION='],
+  ['duplicate unset marker',e=>e.push('NODE_VERSION')],
+  ['duplicate assignment',e=>e.push('HOME=/tmp')],
+  ['missing node marker',e=>e.splice(e.indexOf('NODE_VERSION'),1)],
+  ['missing yarn marker',e=>e.splice(e.indexOf('YARN_VERSION'),1)],
+  ['missing assignment',e=>e.splice(e.indexOf('HOME=/tmp'),1)],
+  ['wrong assignment value',e=>e[e.indexOf('HOME=/tmp')]='HOME=/root']
+ ]) {const x=profile();mutate(x.Config.Env);assert.throws(()=>api.validateInspection(x,'/owned/control.json'),name);}
+});
+test('effective process environment remains exactly six assignments with no unset markers',()=>{
+ const effective=()=>({PATH:'/usr/local/bin:/usr/bin:/bin',HOME:'/tmp',LANG:'C.UTF-8',HOSTNAME:'d0-offline',NODE_ENV:'test',WORKERD_BINARY_PATH:'/probe/tooling/node_modules/@cloudflare/workerd-linux-64/bin/workerd'});
+ assert.equal(api.validateProcessEnvironment(effective()),true);
+ for(const [name,mutate] of [
+  ['empty node variable',e=>e.NODE_VERSION=''],['assigned node variable',e=>e.NODE_VERSION='24.20.0'],
+  ['empty yarn variable',e=>e.YARN_VERSION=''],['assigned yarn variable',e=>e.YARN_VERSION='1.22.22'],
+  ['unknown variable',e=>e.AWS_SESSION_TOKEN='synthetic'],['preload variable',e=>e.NODE_OPTIONS='--import=evil'],
+  ['missing variable',e=>delete e.HOME],['wrong value',e=>e.HOME='/root']
+ ]) {const x=effective();mutate(x);assert.throws(()=>api.validateProcessEnvironment(x),name);}
+});
 for(const [name,mutate] of [
  ['host network',x=>x.HostConfig.NetworkMode='host'],['bridge network',x=>x.HostConfig.NetworkMode='bridge'],
  ['writable root',x=>x.HostConfig.ReadonlyRootfs=false],['root UID',x=>x.Config.User='0:0'],

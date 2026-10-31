@@ -5,9 +5,16 @@ import {resolve,sep} from 'node:path';
 export const environment = ['PATH=/usr/local/bin:/usr/bin:/bin','HOME=/tmp','LANG=C.UTF-8','HOSTNAME=d0-offline','NODE_ENV=test','WORKERD_BINARY_PATH=/probe/tooling/node_modules/@cloudflare/workerd-linux-64/bin/workerd'];
 export const tmpfs = {'/tmp':'rw,noexec,nosuid,nodev,size=67108864,mode=1777','/run':'rw,noexec,nosuid,nodev,size=16777216,mode=755'};
 const empty = x => x == null || (Array.isArray(x) ? x.length===0 : Object.keys(x).length===0);
+export function validateProcessEnvironment(actual) {
+ assert.deepEqual(Object.entries(actual).map(([k,v])=>k+'='+v).sort(),[...environment].sort());
+ return true;
+}
 export function validateInspection(x,controlPath) {
  const c=x.Config,h=x.HostConfig,n=x.NetworkSettings;
- assert.equal(c.User,'10001:10001'); assert.deepEqual([...c.Env].sort(),[...environment].sort());
+ assert.equal(c.User,'10001:10001');
+ // Docker retains exactly these two explicitly unset image variables as bare metadata.
+ // They are forbidden in the effective process environment checked at entry.
+ assert.deepEqual([...c.Env].sort(),[...environment,'NODE_VERSION','YARN_VERSION'].sort());
  assert.deepEqual(c.Entrypoint,['node','/probe/entry.mjs']); assert(c.Cmd==null||c.Cmd.length===0);assert.equal(c.Hostname,'d0-offline');assert.equal(c.WorkingDir,'/probe');
  assert.equal(c.Tty,false);assert.equal(c.OpenStdin,false);
  assert.equal(h.NetworkMode,'none');assert.equal(h.ReadonlyRootfs,true);assert.equal(h.Privileged,false);

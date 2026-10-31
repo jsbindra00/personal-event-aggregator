@@ -8,7 +8,7 @@ import {createSocket} from 'node:dgram';
 import {spawn} from 'node:child_process';
 import {treeFiles} from './acquire.mjs';
 import {recordAndAccept} from './case-evidence.mjs';
-import {environment,validateTerminal,validateInspection,validatePayload} from './check-isolation.mjs';
+import {validateProcessEnvironment,validateTerminal,validateInspection,validatePayload} from './check-isolation.mjs';
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 const listen=(s,...args)=>new Promise((ok,no)=>{s.once('error',no);s.listen(...args,ok)});
 const close=s=>new Promise((ok,no)=>s.close(e=>e?no(e):ok()));
@@ -17,7 +17,7 @@ const result={schema:1,complete:false,status:'FAIL',cleanup:{disposed:false,owne
 let successful=false;
 try {
  assert.equal(process.version,'v24.20.0');assert.equal(process.getuid(),10001);assert.equal(process.getgid(),10001);
- assert.deepEqual(Object.entries(process.env).map(([k,v])=>k+'='+v).sort(),[...environment].sort());
+ validateProcessEnvironment(process.env);
  const descriptors=[];
  for(const n of readdirSync('/proc/self/fd')) {let target;try{target=readlinkSync('/proc/self/fd/'+n)}catch(e){if(e.code==='ENOENT'){descriptors.push({fd:+n,closedDuringEnumeration:true});continue;}throw e;}
   const allowed=target.startsWith('pipe:[')||['anon_inode:[eventpoll]','anon_inode:[eventfd]','anon_inode:[timerfd]','/dev/null'].includes(target);
