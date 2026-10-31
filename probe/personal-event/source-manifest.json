@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "originalSource": {
+    "repository": "https://github.com/jsbindra00/personal-event-aggregator",
+    "commit": "e5356c82af2c1d5b1752b94a2801eb1ee940c31b",
+    "applicationAcquiredOrImported": false
+  },
+  "scope": "Synthetic D0 public payload only; source manifest self-identity is bound by reviewed commit",
+  "sha256": {
+    ".github/workflows/personal-event-worker-probe.yml": "c0225d4171f37546b659191f5294681c2c88cb073988e36edb75f991a2289b12",
+    "probe/personal-event/README.md": "16475bb9931d496e21b8d8c6043494181c3aac4337a9d046bfe4472702ac41bd",
+    "probe/personal-event/acquire.mjs": "a7ad53daeca52f37388f99d9d8ccb107d7692fd29b8928bdb5df481a92c4b338",
+    "probe/personal-event/case-evidence.mjs": "856b0041ba86d811e5d4c66a03f2940db6b8d9c218340ed54dc493df058a138d",
+    "probe/personal-event/check-isolation.mjs": "23d2ebfc56236bbb5f27056bce155989ff1416a344cb1c82a54378792264d789",
+    "probe/personal-event/controller.py": "80b858a69abc6095519ad62f7397df33a5739a75b98d228b5c4a051445a67ef5",
+    "probe/personal-event/d0-fixture.mjs": "f006f0711645d57666cd1e03e6ce2c2433c95b015a4d6d5f373d596456ed7245",
+    "probe/personal-event/dependency-manifest.json": "eb6cfa79b0b56319ae861d79c8c81825f7252ec2c6331b25a62193f04af1b363",
+    "probe/personal-event/entry.mjs": "50b588d152f52187def1215ba50a12e32838f3f53db2aa706646eadf9c4d34c5",
+    "probe/personal-event/runtime-policy.json": "1b2e2372a5744e8e1ca4da8bc6b9cf6fd45496623b3e666262cf210ba8e25845",
+    "probe/personal-event/tests/acquisition.test.mjs": "a33402c0395020bae24dee20af75131a3c023b308b321d1a669cbbc0646ea8ac",
+    "probe/personal-event/tests/case-evidence.test.mjs": "ae3f7bb798321115bc613999847092a3ced07f6604ba29a05a9b310a88adfdbf",
+    "probe/personal-event/tests/policy.test.mjs": "be8ba6300a68f5a6be37a6f435787c19e97901a6ea2e816cb880390a0a46a736",
+    "probe/personal-event/tests/test_collection.py": "acbd317d1226a38add8d2ea98a4576c184ae5463cfc0604901c200a672f97789",
+    "probe/personal-event/tooling/package-lock.json": "34d3a864ec1bdcd9b96a7236239abef874a47fdc33e4318c0474c67d6bb91ae1",
+    "probe/personal-event/tooling/package.json": "6e0e2fadbf2d5bacb5edf3df90650245e3a0c2baec7ed6b4a69f3a6b7c9a7bc4"
+  }
+}

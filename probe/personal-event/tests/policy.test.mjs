@@ -1,0 +1,41 @@
+// Pure simulated inspection fixtures: never container observations.
+// Removing each safety check, digest check or complete-output check must fail these tests.
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,writeFileSync,symlinkSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+const api = await import('../check-isolation.mjs');
+const profile=()=>({Config:{Hostname:'d0-offline',User:'10001:10001',Env:['PATH=/usr/local/bin:/usr/bin:/bin','HOME=/tmp','LANG=C.UTF-8','HOSTNAME=d0-offline','NODE_ENV=test','WORKERD_BINARY_PATH=/probe/tooling/node_modules/@cloudflare/workerd-linux-64/bin/workerd'],Entrypoint:['node','/probe/entry.mjs'],Cmd:[],WorkingDir:'/probe',Tty:false,OpenStdin:false},HostConfig:{NetworkMode:'none',ReadonlyRootfs:true,Privileged:false,CapDrop:['ALL'],CapAdd:null,SecurityOpt:['no-new-privileges'],Binds:null,Devices:[],DeviceRequests:null,ExtraHosts:null,PidMode:'',IpcMode:'private',CgroupnsMode:'private',UsernsMode:'',PortBindings:{},PublishAllPorts:false,Memory:2147483648,MemorySwap:2147483648,NanoCpus:2000000000,PidsLimit:256,Tmpfs:{'/tmp':'rw,noexec,nosuid,nodev,size=67108864,mode=1777','/run':'rw,noexec,nosuid,nodev,size=16777216,mode=755'}},Mounts:[{Type:'bind',Source:'/owned/control.json',Destination:'/control.json',RW:false}],NetworkSettings:{Networks:{none:{IPAddress:'',GlobalIPv6Address:'',Gateway:''}},Ports:{} }});
+test('accepts exact reviewed offline profile',()=>assert.equal(api.validateInspection(profile(),'/owned/control.json'),true));
+for(const [name,mutate] of [
+ ['host network',x=>x.HostConfig.NetworkMode='host'],['bridge network',x=>x.HostConfig.NetworkMode='bridge'],
+ ['writable root',x=>x.HostConfig.ReadonlyRootfs=false],['root UID',x=>x.Config.User='0:0'],
+ ['privilege',x=>x.HostConfig.Privileged=true],['capability',x=>x.HostConfig.CapAdd=['NET_ADMIN']],
+ ['device',x=>x.HostConfig.Devices=[{PathOnHost:'/dev/kvm'}]],['host PID',x=>x.HostConfig.PidMode='host'],
+ ['host mount',x=>x.Mounts.push({Type:'bind',Source:'/var/run/docker.sock',Destination:'/socket',RW:false})],
+ ['write input',x=>x.Mounts[0].RW=true],['credential env',x=>x.Config.Env.push('AWS_ACCESS_KEY_ID=synthetic')],
+ ['preload',x=>x.Config.Env.push('NODE_OPTIONS=--import=evil')],['extra address',x=>x.NetworkSettings.Networks.none.IPAddress='172.17.0.2'],
+ ['missing cpu bound',x=>x.HostConfig.NanoCpus=0],['unbounded tmpfs',x=>x.HostConfig.Tmpfs['/tmp']='rw'],
+ ['interactive stdin',x=>x.Config.OpenStdin=true]
+]) test(`rejects ${name}`,()=>{const x=profile();mutate(x);assert.throws(()=>api.validateInspection(x,'/owned/control.json'));});
+test('payload digests accept bytes, reject unknown or changed payload',()=>{
+ const sealed={'a.txt':'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'};
+ assert.equal(api.validatePayload({'a.txt':Buffer.from('abc')},sealed),true);
+ assert.throws(()=>api.validatePayload({'a.txt':Buffer.from('abd')},sealed));
+ assert.throws(()=>api.validatePayload({'a.txt':Buffer.from('abc'),'other':Buffer.from('abc')},sealed));
+});
+const terminal=()=>({schema:1,complete:true,status:'PASS',cleanup:{disposed:true,ownedChildrenRemaining:[]},ledger:[{url:'https://fixture.invalid/v1/event',method:'GET'}],expectedLedger:[{url:'https://fixture.invalid/v1/event',method:'GET'}],violations:[]});
+test('accepts complete terminal and rejects truncation, missing cleanup, or unexpected fetch',()=>{
+ const x=terminal();assert.equal(api.validateTerminal(JSON.stringify(x)),true);
+ assert.throws(()=>api.validateTerminal(JSON.stringify(x).slice(0,-1)));
+ for(const mutate of [x=>x.complete=false,x=>delete x.cleanup,x=>x.ledger.push({url:'https://other.invalid/',method:'GET'}),x=>x.violations.push('caught denial'),x=>x.cleanup.ownedChildrenRemaining.push(42)]) {const y=terminal();mutate(y);assert.throws(()=>api.validateTerminal(JSON.stringify(y)));}
+});
+test('collector accepts regular owned file and rejects symlink even to allowed content',()=>{
+ const d=mkdtempSync(join(tmpdir(),'d0-pure-'));
+ try {writeFileSync(join(d,'result.json'),'{}');symlinkSync('result.json',join(d,'link.json'));
+ assert.equal(api.validateCollectedFile(d,'result.json',64),true);
+ assert.throws(()=>api.validateCollectedFile(d,'link.json',64));
+ assert.throws(()=>api.validateCollectedFile(d,'../escape.json',64));
+ assert.throws(()=>api.validateCollectedFile(d,'result.json',1));} finally {rmSync(d,{recursive:true,force:true});}
+});

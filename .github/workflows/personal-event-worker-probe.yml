@@ -1,0 +1,63 @@
+name: Personal Event D0 synthetic Worker probe
+run-name: D0 reviewed diagnostic push ${{ github.sha }}
+on:
+  push:
+    branches: [codex/cloudflare-personal-event-probe]
+    paths: ["probe/personal-event/**", ".github/workflows/personal-event-worker-probe.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: personal-event-d0-diagnostic
+  cancel-in-progress: false
+jobs:
+  d0:
+    if: github.repository == 'jsbindra00/personal-event-aggregator' && github.actor == 'jsbindra00'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Acquire only reviewed public probe paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = refs/heads/codex/cloudflare-personal-event-probe
+          test "${#GITHUB_SHA}" = 40
+          source="$RUNNER_TEMP/personal-event-d0-source"
+          mkdir "$source" "$RUNNER_TEMP/d0-git-home"
+          export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0
+          export HOME="$RUNNER_TEMP/d0-git-home"
+          git -C "$source" init
+          git -C "$source" config credential.helper ''
+          git -C "$source" config core.hooksPath /dev/null
+          git -C "$source" remote add origin https://github.com/jsbindra00/personal-event-aggregator.git
+          git -C "$source" config remote.origin.promisor true
+          git -C "$source" config remote.origin.partialCloneFilter blob:none
+          git -C "$source" fetch --depth=1 --filter=blob:none origin "$GITHUB_SHA"
+          git -C "$source" sparse-checkout init --no-cone
+          git -C "$source" sparse-checkout set --no-cone /probe/personal-event/ /.github/workflows/personal-event-worker-probe.yml
+          git -C "$source" checkout --detach "$GITHUB_SHA"
+          test "$(git -C "$source" rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Acquisition 5m, offline 12m, collection 3m
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/personal-event-d0-source/probe/personal-event/controller.py"
+      - name: Validate and expose upload-ready evidence
+        id: evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/personal-event-d0-source/probe/personal-event/controller.py" --prepare-upload
+      - name: Upload bounded evidence only
+        if: always() && steps.evidence.outputs.ready == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: personal-event-d0-${{ github.sha }}
+          path: ${{ runner.temp }}/personal-event-d0-upload/
+          if-no-files-found: error
+          retention-days: 1
+          archive: true
+          overwrite: false
+          compression-level: 9
+          include-hidden-files: false
