@@ -513,7 +513,7 @@
   },
   "allowedLoadedNativePaths": {
     "workerd": "/probe/tooling/node_modules/@cloudflare/workerd-linux-64/bin/workerd",
-    "sharp": "/probe/tooling/node_modules/miniflare/node_modules/@img/sharp-linux-x64/lib/sharp-linux-x64.node",
+    "sharp": "/probe/tooling/node_modules/miniflare/node_modules/@img/sharp-linux-x64/lib/sharp-linux-x64-0.35.5.node",
     "libvipsDirectory": "/probe/tooling/node_modules/miniflare/node_modules/@img/sharp-libvips-linux-x64/lib/"
   }
 }

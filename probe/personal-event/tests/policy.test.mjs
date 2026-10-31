@@ -2,7 +2,7 @@
 // Removing each safety check, digest check or complete-output check must fail these tests.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,writeFileSync,symlinkSync,rmSync} from 'node:fs';
+import {mkdtempSync,readFileSync,writeFileSync,symlinkSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const api = await import('../check-isolation.mjs');
@@ -66,4 +66,35 @@ test('collector accepts regular owned file and rejects symlink even to allowed c
  assert.throws(()=>api.validateCollectedFile(d,'link.json',64));
  assert.throws(()=>api.validateCollectedFile(d,'../escape.json',64));
  assert.throws(()=>api.validateCollectedFile(d,'result.json',1));} finally {rmSync(d,{recursive:true,force:true});}
+});
+
+// Recorded run 41163540272 cache pathname, replayed as data only; no native import.
+// These controls reject the obsolete guard and permissive basename/version/root matching.
+const observedSharpPath='/probe/tooling/node_modules/miniflare/node_modules/@img/sharp-linux-x64/lib/sharp-linux-x64-0.35.5.node';
+test('native cache policy accepts the exact pinned Sharp path observed in the failed case',()=>{
+ assert.equal(typeof api.validateSharpNativePaths,'function');
+ assert.equal(api.validateSharpNativePaths([observedSharpPath]),true);
+});
+test('native cache policy rejects wrong identity, location and non-singleton caches',()=>{
+ assert.equal(typeof api.validateSharpNativePaths,'function');
+ for(const [name,paths] of [
+  ['unversioned binding',[observedSharpPath.replace('-0.35.5.node','.node')]],
+  ['wrong version',[observedSharpPath.replace('0.35.5','0.35.4')]],
+  ['musl binding',[observedSharpPath.replaceAll('sharp-linux-x64','sharp-linuxmusl-x64')]],
+  ['wrong architecture',[observedSharpPath.replaceAll('linux-x64','linux-arm64')]],
+  ['wrong OS',[observedSharpPath.replaceAll('linux-x64','darwin-x64')]],
+  ['hoisted package',[observedSharpPath.replace('miniflare/node_modules/','')]],
+  ['foreign root',[observedSharpPath.replace('/probe/tooling/','/other/tooling/')]],
+  ['extra directory',[observedSharpPath.replace('/lib/','/lib/extra/')]],
+  ['traversal spelling',[observedSharpPath.replace('/lib/','/lib/../lib/')]],
+  ['basename only',['sharp-linux-x64-0.35.5.node']],
+  ['missing addon',[]],['duplicate addon',[observedSharpPath,observedSharpPath]],
+  ['additional addon',[observedSharpPath,'/probe/tooling/node_modules/other/addon.node']]
+ ])assert.throws(()=>api.validateSharpNativePaths(paths),{name:'AssertionError'},name);
+});
+test('sealed dependency manifest sharp identity agrees with the enforced native cache policy',()=>{
+ const manifest=JSON.parse(readFileSync(new URL('../dependency-manifest.json',import.meta.url),'utf8'));
+ assert.equal(manifest.allowedLoadedNativePaths.sharp,observedSharpPath);
+ assert.equal(typeof api.validateSharpNativePaths,'function');
+ assert.equal(api.validateSharpNativePaths([manifest.allowedLoadedNativePaths.sharp]),true);
 });

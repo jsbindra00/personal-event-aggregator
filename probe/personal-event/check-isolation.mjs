@@ -42,3 +42,8 @@ export function validateCollectedFile(root,name,maxBytes) {
  const path=resolve(root,name),s=lstatSync(path);assert(s.isFile()&&!s.isSymbolicLink());
  assert(realpathSync(path).startsWith(realpathSync(root)+sep));assert(s.size<=maxBytes);return true;
 }
+
+export function validateSharpNativePaths(actual) {
+ assert.deepEqual(actual,['/probe/tooling/node_modules/miniflare/node_modules/@img/sharp-linux-x64/lib/sharp-linux-x64-0.35.5.node']);
+ return true;
+}

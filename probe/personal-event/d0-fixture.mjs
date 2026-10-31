@@ -6,6 +6,7 @@ import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {request as httpRequest} from 'node:http';
 import {execFileSync} from 'node:child_process';
+import {validateSharpNativePaths} from './check-isolation.mjs';
 const require=createRequire('/probe/tooling/package.json'),sharpRequire=createRequire('/probe/tooling/node_modules/miniflare/package.json');
 const name=process.argv[2],delay=ms=>new Promise(ok=>setTimeout(ok,ms));
 const known={url:'https://fixture.invalid/v1/event',method:'GET'};
@@ -18,7 +19,7 @@ try {
  assert.equal(typeof convertV4MiniflareOptions,'function');assert.equal(JSON.parse(readFileSync('/probe/tooling/node_modules/miniflare/package.json')).version,'5.20261023.1-beta');
  const workerd=process.env.WORKERD_BINARY_PATH;assert.equal(workerd,'/probe/tooling/node_modules/@cloudflare/workerd-linux-64/bin/workerd');assert(execFileSync(workerd,['--version'],{encoding:'utf8'}).includes('2026-10-23'));
  const sharp=sharpRequire('sharp');assert.equal(sharp.versions.sharp,'0.35.5');const png=await sharp(Buffer.from([0,0,0,255]),{raw:{width:1,height:1,channels:4}}).png().toBuffer();assert.equal((await sharp(png).metadata()).width,1);
- const native=Object.keys(sharpRequire.cache).filter(p=>p.endsWith('.node'));assert.deepEqual(native,['/probe/tooling/node_modules/miniflare/node_modules/@img/sharp-linux-x64/lib/sharp-linux-x64.node']);
+ const native=Object.keys(sharpRequire.cache).filter(p=>p.endsWith('.node'));validateSharpNativePaths(native);
  const libraryPaths=[...new Set(readFileSync('/proc/self/maps','utf8').split('\n').map(l=>l.split(/\s+/).at(-1)).filter(p=>p?.startsWith('/probe/tooling/')&&p.includes('.so')))];
  assert(libraryPaths.some(p=>p.startsWith('/probe/tooling/node_modules/miniflare/node_modules/@img/sharp-libvips-linux-x64/lib/libvips')));
  for(const p of libraryPaths)assert(p.startsWith('/probe/tooling/node_modules/miniflare/node_modules/@img/sharp-libvips-linux-x64/lib/'),'unexpected loaded tooling shared library');
