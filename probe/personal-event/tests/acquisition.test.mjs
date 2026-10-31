@@ -8,7 +8,7 @@ test('registry guard accepts pinned integrity and blocks fallback/custom registr
 });
 
 test('inventory preserves required package identity and rejects extra, missing or wrong package',()=>{
- const lock={packages:{'':{},'node_modules/a':{version:'1.0.0'},'node_modules/b':{version:'2.0.0',optional:true}}};
+ const lock={packages:{'':{dependencies:{a:'1.0.0'},optionalDependencies:{b:'2.0.0'}},'node_modules/a':{version:'1.0.0'},'node_modules/b':{version:'2.0.0',optional:true}}};
  assert.equal(validateInstalled([{path:'node_modules/a',version:'1.0.0'}],lock),true);
  for(const installed of [[],[{path:'node_modules/a',version:'1.0.1'}],[{path:'node_modules/a',version:'1.0.0'},{path:'node_modules/extra',version:'1.0.0'}]])assert.throws(()=>validateInstalled(installed,lock));
 });
@@ -41,4 +41,56 @@ test('npm config verification rejects nonempty, symlinked and same-inode config 
    assert.throws(()=>verify(root));
   }finally{rmSync(temp,{recursive:true,force:true});}
  }
+});
+
+// Frozen JSON metadata only. This candidate installed-set fixture is consistent with the
+// physical npm count/omission, not an invented observation of that run's full package set.
+const frozen=JSON.parse(readFileSync(new URL('../tooling/package-lock.json',import.meta.url),'utf8'));
+const linuxPaths=[
+ 'node_modules/@cloudflare/workerd-linux-64',
+ 'node_modules/@cspotcode/source-map-support',
+ 'node_modules/@cspotcode/source-map-support/node_modules/@jridgewell/trace-mapping',
+ 'node_modules/@jridgewell/resolve-uri','node_modules/@jridgewell/sourcemap-codec',
+ 'node_modules/@poppinss/colors','node_modules/@poppinss/dumper',
+ 'node_modules/@poppinss/dumper/node_modules/supports-color','node_modules/@poppinss/exception',
+ 'node_modules/@sindresorhus/is','node_modules/@speed-highlight/core',
+ 'node_modules/cookie','node_modules/detect-libc','node_modules/error-stack-parser-es','node_modules/kleur',
+ 'node_modules/miniflare','node_modules/miniflare/node_modules/@img/colour',
+ 'node_modules/miniflare/node_modules/@img/sharp-libvips-linux-x64',
+ 'node_modules/miniflare/node_modules/@img/sharp-libvips-linuxmusl-x64',
+ 'node_modules/miniflare/node_modules/@img/sharp-linux-x64',
+ 'node_modules/miniflare/node_modules/@img/sharp-linuxmusl-x64',
+ 'node_modules/miniflare/node_modules/semver','node_modules/miniflare/node_modules/sharp',
+ 'node_modules/undici','node_modules/workerd','node_modules/ws','node_modules/youch','node_modules/youch-core'
+];
+const linuxInstalled=()=>linuxPaths.map(path=>({path,version:frozen.packages[path].version}));
+test('frozen graph allows tslib omission only when its optional WASM consumers are omitted',()=>{
+ assert.equal(linuxPaths.length,28);assert.equal(validateInstalled(linuxInstalled(),frozen),true);
+ // Installing a formerly omitted branch makes its ordinary dependencies mandatory,
+ // including hoisted tslib despite its inherited global optional flag being absent.
+ const branch=['node_modules/@img/sharp-freebsd-wasm32','node_modules/@img/sharp-freebsd-wasm32/node_modules/@img/sharp-wasm32','node_modules/@img/sharp-freebsd-wasm32/node_modules/@img/sharp-wasm32/node_modules/@emnapi/runtime'];
+ const present=[...linuxInstalled(),...branch.map(path=>({path,version:frozen.packages[path].version}))];
+ assert.throws(()=>validateInstalled(present,frozen),/missing required node_modules\/tslib/);
+ assert.equal(validateInstalled([...present,{path:'node_modules/tslib',version:'2.8.1'}],frozen),true);
+});
+test('genuine root, installed-consumer and nested-path omissions remain fatal in the frozen graph',()=>{
+ for(const missing of ['node_modules/miniflare','node_modules/workerd','node_modules/miniflare/node_modules/sharp','node_modules/miniflare/node_modules/semver'])assert.throws(()=>validateInstalled(linuxInstalled().filter(x=>x.path!==missing),frozen),/missing required/);
+ const required=structuredClone(frozen);required.packages[''].dependencies={tslib:'2.8.1'};
+ assert.throws(()=>validateInstalled(linuxInstalled(),required),/missing required node_modules\/tslib/);
+ const wrong=linuxInstalled();wrong.find(x=>x.path==='node_modules/miniflare/node_modules/@img/sharp-linux-x64').version='0.35.4';assert.throws(()=>validateInstalled(wrong,frozen));
+ const relocated=linuxInstalled().filter(x=>x.path!=='node_modules/miniflare/node_modules/semver');relocated.push({path:'node_modules/semver',version:'7.8.5'});assert.throws(()=>validateInstalled(relocated,frozen),/non-lock/);
+});
+test('required install obligations follow dependency kinds, not global optional bits or metadata-only peers',()=>{
+ const lock={packages:{'':{devDependencies:{a:'1.0.0'}},'node_modules/a':{version:'1.0.0',dependencies:{b:'1.0.0',optional:'1.0.0'},optionalDependencies:{optional:'1.0.0'},devDependencies:{devOnly:'1.0.0'},peerDependencies:{peer:'1.0.0',optionalPeer:'1.0.0'},peerDependenciesMeta:{optionalPeer:{optional:true},metadataOnly:{optional:true}}},'node_modules/b':{version:'1.0.0',optional:true},'node_modules/peer':{version:'1.0.0'},'node_modules/optional':{version:'1.0.0',optional:true}}};
+ const installed=[{path:'node_modules/a',version:'1.0.0'},{path:'node_modules/b',version:'1.0.0'},{path:'node_modules/peer',version:'1.0.0'}];
+ assert.equal(validateInstalled(installed,lock),true);
+ for(const missing of ['node_modules/b','node_modules/peer'])assert.throws(()=>validateInstalled(installed.filter(x=>x.path!==missing),lock),/missing required/);
+ assert.throws(()=>validateInstalled([...installed,{path:'node_modules/optional',version:'1.0.1'}],lock));
+});
+
+test('failed validation retains the full public installed and omitted inventory first',()=>{
+ const retained=[],installed=linuxInstalled().filter(x=>x.path!=='node_modules/workerd');
+ assert.throws(()=>validateInstalled(installed,frozen,record=>retained.push(record)),/missing required/);
+ assert.equal(retained.length,1);assert.deepEqual(retained[0].installed,installed);
+ assert(retained[0].omittedLocked.includes('node_modules/workerd'));assert(retained[0].omittedLocked.includes('node_modules/tslib'));
 });
