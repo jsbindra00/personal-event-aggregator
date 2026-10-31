@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "image": "docker.io/library/node@sha256:a747ad80c8a161b650d79a6da9c422005b91148b18b8d2c669eb5a0b7c07e600",
+  "platform": "linux/amd64",
+  "node": "v24.20.0",
+  "miniflare": "5.20261023.1-beta",
+  "workerd": "1.20261023.1",
+  "compatibilityDate": "2026-10-23",
+  "compatibilityFlags": [
+    "nodejs_compat"
+  ],
+  "uid": 10001,
+  "gid": 10001,
+  "cpus": 2,
+  "memoryBytes": 2147483648,
+  "pids": 256,
+  "phaseSeconds": {
+    "acquisition": 300,
+    "offline": 720,
+    "collection": 180
+  },
+  "combinedLogBytes": 262144,
+  "terminalBytes": 65536,
+  "artifactBytes": 524288,
+  "scope": "synthetic D0 only; finite controlled egress tests, no universal syscall claim; all application/provider/D1/D2 tests deferred"
+}
