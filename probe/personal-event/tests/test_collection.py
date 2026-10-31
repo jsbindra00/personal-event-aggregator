@@ -159,6 +159,22 @@ class PureDocker:
         return code,out,err
 
 class AcquisitionLifecycleTests(unittest.TestCase):
+    def test_distinct_empty_configs_are_prepared_before_first_npm_command(self):
+        runner=PureDocker('task');a=c.OwnedAcquisition(runner,'task','task:sealed');a.acquire(pathlib.Path('/synthetic/context'))
+        executions=[v for v in runner.calls if v[1]=='exec']
+        setup=[v for v in executions if '--prepare-npm-config' in v]
+        self.assertEqual(len(setup),1)
+        npm_calls=[v for v in executions if 'npm' in v]
+        self.assertGreater(len(npm_calls),0);self.assertLess(executions.index(setup[0]),executions.index(npm_calls[0]))
+        for v in executions:
+            self.assertIn('env',v);self.assertIn('-i',v)
+            self.assertIn('npm_config_userconfig=/acquisition-config/user.npmrc',v)
+            self.assertIn('npm_config_globalconfig=/acquisition-config/global.npmrc',v)
+            self.assertNotIn('npm_config_userconfig=/dev/null',v);self.assertNotIn('npm_config_globalconfig=/dev/null',v)
+        ci=next(v for v in npm_calls if 'ci' in v)
+        for flag in ['--ignore-scripts','--no-audit','--no-fund','npm_config_registry=https://registry.npmjs.org']:self.assertIn(flag,ci)
+        a.cleanup()
+
     def test_failure_after_install_reaps_exact_container_with_no_final_tag(self):
         runner=PureDocker('task','after-install');a=c.OwnedAcquisition(runner,'task','task:sealed')
         with self.assertRaises(RuntimeError):a.acquire(pathlib.Path('/synthetic/context'))

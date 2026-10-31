@@ -166,8 +166,8 @@ class OwnedAcquisition:
         self.cid=self.run(['docker','create','--name',self.name,'--label','personal-event-d0='+self.task,'--platform','linux/amd64','--network','bridge','--cpus','2','--memory','2147483648','--pids-limit','256','--entrypoint','node',BASE,'-e',keeper])[1].decode().strip()
         if len(self.cid)!=64:raise RuntimeError('missing acquisition id')
         self.inspect_container();self.evidence['createCompletionVerified']=True;self.run(['docker','cp',str(context)+'/.',self.cid+':/probe']);self.run(['docker','start',self.cid])
-        env=['PATH=/usr/local/bin:/usr/bin:/bin','HOME=/tmp','LANG=C.UTF-8','npm_config_userconfig=/dev/null','npm_config_globalconfig=/dev/null','npm_config_registry=https://registry.npmjs.org','npm_config_update_notifier=false']
-        for command in [['node','/probe/acquire.mjs','--preflight'],['npm','ci','--ignore-scripts','--include=optional','--no-audit','--no-fund','--cache=/acquisition-cache','--fetch-retries=0','--fetch-timeout=30000'],['npm','cache','verify','--cache=/acquisition-cache'],['node','/probe/acquire.mjs']]:
+        env=['PATH=/usr/local/bin:/usr/bin:/bin','HOME=/tmp','LANG=C.UTF-8','npm_config_userconfig=/acquisition-config/user.npmrc','npm_config_globalconfig=/acquisition-config/global.npmrc','npm_config_registry=https://registry.npmjs.org','npm_config_update_notifier=false']
+        for command in [['node','/probe/acquire.mjs','--preflight'],['node','/probe/acquire.mjs','--prepare-npm-config'],['npm','ci','--ignore-scripts','--include=optional','--no-audit','--no-fund','--cache=/acquisition-cache','--fetch-retries=0','--fetch-timeout=30000'],['npm','cache','verify','--cache=/acquisition-cache'],['node','/probe/acquire.mjs']]:
             self.evidence['activeCommand']=command;self.run(['docker','exec','--workdir','/probe/tooling',self.cid,'env','-i',*env,*command]);self.evidence['activeCommand']=None
         self.run(['docker','stop','--timeout','5',self.cid]);self.stopped()
         if self.evidence['containerExitCode']!=0:raise RuntimeError('acquisition keeper did not stop cleanly')

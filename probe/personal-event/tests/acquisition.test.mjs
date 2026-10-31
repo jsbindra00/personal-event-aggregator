@@ -12,3 +12,33 @@ test('inventory preserves required package identity and rejects extra, missing o
  assert.equal(validateInstalled([{path:'node_modules/a',version:'1.0.0'}],lock),true);
  for(const installed of [[],[{path:'node_modules/a',version:'1.0.1'}],[{path:'node_modules/a',version:'1.0.0'},{path:'node_modules/extra',version:'1.0.0'}]])assert.throws(()=>validateInstalled(installed,lock));
 });
+
+import * as acquisition from '../acquire.mjs';
+import {mkdtempSync,readFileSync,lstatSync,writeFileSync,unlinkSync,symlinkSync,linkSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+const prepare=acquisition.prepareNpmConfigs;
+const verify=acquisition.verifyNpmConfigs;
+test('stdlib setup creates distinct owned empty regular npm configs without reusing existing paths',()=>{
+ const temp=mkdtempSync(join(tmpdir(),'d0-pure-npm-config-')),root=join(temp,'config');
+ try {
+  const evidence=prepare(root);
+  assert.deepEqual(evidence.map(x=>x.layer),['user','global']);
+  assert.deepEqual(evidence.map(x=>x.path),[join(root,'user.npmrc'),join(root,'global.npmrc')]);
+  for(const x of evidence){assert.equal(readFileSync(x.path).length,0);assert.equal(x.bytes,0);assert.equal(x.sha256,'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');assert(lstatSync(x.path).isFile());assert.equal(lstatSync(x.path).mode&0o777,0o600);}
+  assert.notEqual(lstatSync(evidence[0].path).ino,lstatSync(evidence[1].path).ino);
+  assert.deepEqual(verify(root),evidence);assert.throws(()=>prepare(root));
+ }finally{rmSync(temp,{recursive:true,force:true});}
+});
+test('npm config verification rejects nonempty, symlinked and same-inode config layers',()=>{
+ for(const kind of ['nonempty','symlink','hardlink']){
+  const temp=mkdtempSync(join(tmpdir(),'d0-pure-npm-config-')),root=join(temp,'config');
+  try{
+   prepare(root);const user=join(root,'user.npmrc'),global=join(root,'global.npmrc');
+   if(kind==='nonempty')writeFileSync(user,'synthetic=unsafe');
+   if(kind==='symlink'){unlinkSync(global);symlinkSync(user,global);}
+   if(kind==='hardlink'){unlinkSync(global);linkSync(user,global);}
+   assert.throws(()=>verify(root));
+  }finally{rmSync(temp,{recursive:true,force:true});}
+ }
+});
